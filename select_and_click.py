@@ -131,19 +131,43 @@ class ImageDisplayApp(tk.Tk):
 
         start_index = int(self.image_slider.get())
 
-        # Create placeholder images
-        self.image_ids = []  # Store image IDs for click detection
+        
+        self.image_ids = []  
         self.tk_images = []
 
         for i in range(grid_size * grid_size):
             img_index = start_index + i
             if img_index >= len(self.images):
                 break
-
+            
             img = self.images[img_index]
             img_width = int(cell_width)
             img_height = int(cell_height)
+            
+
+            mask_file = os.path.join(self.mask_dir, f"mask_{img_index:05d}.png")
+            
+
+            if os.path.isfile(mask_file):
+                mask = Image.open(mask_file).convert("1")  # Load mask as grayscale
+
+                # Create a red overlay with the same dimensions as the image
+                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 128))  # Red color with 50% transparency
+
+                # Convert the mask to binary and apply it
+                mask_binary = mask.point(lambda p: p > 128 and 255)  # Binarize mask (white areas are 255)
+                red_overlay = Image.composite(red_overlay, Image.new("RGBA", img.size, (0, 0, 0, 0)), mask_binary)
+
+                if img.mode != 'RGBA':
+                    img = img.convert('RGBA')
+
+                # Apply the overlay to the image
+                img = Image.alpha_composite(img, red_overlay)
+
+                img = img.convert("RGB")
+
             img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
+
             tk_img = ImageTk.PhotoImage(img)
             self.tk_images.append(tk_img)
 
@@ -313,6 +337,7 @@ class ImageDisplayApp(tk.Tk):
             print("closed")
             self.save_points_to_file(frame_number)
             annotation_window.destroy()
+            self.show_propagated_images()
 
         # Create a Matplotlib figure and axis for the image
         fig = plt.Figure(figsize=(6, 6), dpi=100)
@@ -345,17 +370,26 @@ class ImageDisplayApp(tk.Tk):
 
         # Render and save the segmentation results only for the propagated frames
         
-        result_dir = os.path.join(self.frame_dir, "propagated_frames")
-        os.makedirs(result_dir, exist_ok=True)  # Create the directory if it doesn't exist
+        
+          # Create the directory if it doesn't exist
 
-        for out_frame_idx in sorted(video_segments.keys()):
-            plt.figure(figsize=(6, 4))
-            plt.axis('off')  # Remove axes   
+        for out_frame_idx, masks in video_segments.items():
+            for out_obj_id, out_mask in masks.items():
+                # Remove singleton dimensions
+                out_mask = np.squeeze(out_mask)  # Squeeze to remove dimensions of size 1
+
+                # Convert the mask to a PIL image
+                if out_mask.ndim == 2:  # If the mask is 2D, proceed
+                    out_mask_img = Image.fromarray((out_mask * 255).astype('uint8'))
+                    # Save the mask image with an increasing index
+                    out_mask_img.save(os.path.join(self.mask_dir, f'mask_{out_frame_idx:05d}.png'))
+                else:
+                    print(f"Unexpected mask shape: {out_mask.shape}")
+        
+        self.update_grid()
             
-            # Save the mask image with an increasing index
-            plt.savefig(os.path.join(result_dir, f'{out_frame_idx:05d}.png'), bbox_inches='tight', pad_inches=0)
-            plt.clf()  # Clear the figure to prevent overlapping of images
-
+        
+            
 
     def run(self):
         """Start the Tkinter event loop."""
