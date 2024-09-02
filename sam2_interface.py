@@ -1,12 +1,19 @@
+"""
+This Programm loads images from a directory and lets you iteractively use SAM2 to track an object through the video
+"""
+
+
+
+
+
+
 import tkinter as tk
 from tkinter import ttk, filedialog
 from PIL import Image, ImageTk
 import torch
 import os
-import cv2
 import numpy as np
 from sam2.build_sam import build_sam2_video_predictor
-from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -74,6 +81,9 @@ class ImageDisplayApp(tk.Tk):
         self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
+
+
+
 
     def select_directory(self):
         """Open a directory dialog and load images from the selected directory."""
