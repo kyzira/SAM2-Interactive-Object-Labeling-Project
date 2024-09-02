@@ -123,8 +123,6 @@ def add_points(frame_number, image_path):
             mask_image = Image.fromarray(mask)
             mask_image.save(os.path.join(output_dir, f'mask_{ann_frame_idx:05d}.png'))
 
-
-
             # Clear previous plot and update the mask
             ax.clear()
             ax.imshow(image, aspect='auto')

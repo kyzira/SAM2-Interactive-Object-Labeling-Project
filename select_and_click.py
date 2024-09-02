@@ -1,14 +1,26 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 from PIL import Image, ImageTk
+import torch
 import os
 import cv2
 import numpy as np
 from sam2.build_sam import build_sam2_video_predictor
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 # Initialize the predictor as needed
 sam2_checkpoint = r"C:\Users\K3000\segment-anything-2\checkpoints\sam2_hiera_large.pt"
 model_cfg = "sam2_hiera_l.yaml"
+
+# use bfloat16 for the entire notebook
+torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+
+if torch.cuda.get_device_properties(0).major >= 8:
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
@@ -19,6 +31,9 @@ class ImageDisplayApp(tk.Tk):
         self.images = []
         self.image_paths = []
         self.initialized = False
+
+        # Initialize object ID
+        self.ann_obj_id = 1
 
         # Initialize canvas
         self.canvas = tk.Canvas(self, width=800, height=600, bg='white')
@@ -49,15 +64,14 @@ class ImageDisplayApp(tk.Tk):
         self.slider_frame.pack(side='bottom', fill='x', padx=10, pady=5)
 
         # Initialize slider
-        self.image_slider = ttk.Scale(self.slider_frame, from_=0, to=0, orient='horizontal', command=self.update_displayed_images)
+        self.image_slider = ttk.Scale(self.slider_frame, from_=0, to=0, orient='horizontal', command=self.display_images)
         self.image_slider.pack(fill='x')
 
-        # Bind mouse click event to canvas
-        self.canvas.bind("<Button-1>", self.on_canvas_click)
-        self.initialized = True
-
+        self.points = []
+        self.labels = []
         self.inference_state = None
         self.frame_dir = None
+        self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
 
@@ -75,6 +89,9 @@ class ImageDisplayApp(tk.Tk):
                     self.images.append(img)
             print(f"Loaded {len(self.images)} images from {directory}")
             self.frame_dir = directory  # Save directory path
+            self.mask_dir = os.path.join(self.frame_dir, "masks")
+            os.makedirs(self.mask_dir, exist_ok=True)
+
             self.update_grid()  # Refresh the grid and slider based on new images
 
             # Initialize predictor state
@@ -82,7 +99,7 @@ class ImageDisplayApp(tk.Tk):
                 self.inference_state = predictor.init_state(video_path=self.frame_dir)
                 self.predictor_initialized = True
 
-    def display_images(self):
+    def display_images(self, *args):
         """Displays images in a grid format on the canvas."""
         if not self.initialized:
             return  # Do nothing if not initialized
@@ -112,18 +129,20 @@ class ImageDisplayApp(tk.Tk):
         cell_width = canvas_width / grid_size
         cell_height = canvas_height / grid_size
 
+        start_index = int(self.image_slider.get())
+
         # Create placeholder images
-        self.tk_images = []
         self.image_ids = []  # Store image IDs for click detection
+        self.tk_images = []
+
         for i in range(grid_size * grid_size):
-            if i >= len(self.images):
+            img_index = start_index + i
+            if img_index >= len(self.images):
                 break
 
-            img = self.images[i]
-            h, w = img.size
-
-            img_width = int(w * cell_width / w)
-            img_height = int(h * cell_height / h)
+            img = self.images[img_index]
+            img_width = int(cell_width)
+            img_height = int(cell_height)
             img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
             tk_img = ImageTk.PhotoImage(img)
             self.tk_images.append(tk_img)
@@ -159,71 +178,18 @@ class ImageDisplayApp(tk.Tk):
                 self.image_slider.config(to=num_images - images_per_grid)
             else:
                 self.image_slider.config(to=0)
-            
+
             # Reset the slider value to 0
             self.image_slider.set(0)
 
             # Update the displayed images based on the slider value
-            self.update_displayed_images()
+            self.display_images()
 
         except ValueError as e:
             print(f"Error updating grid: {e}")
 
-    def update_displayed_images(self, event=None):
-        """Update the images displayed on the canvas based on the slider value."""
-        if not self.initialized:
-            return
-
-        # Get the grid size from the entry field
-        try:
-            grid_size = int(self.grid_entry.get())
-        except ValueError:
-            print("Invalid input. Please enter a valid integer.")
-            return
-
-        # Get the slider value
-        slider_value = int(self.image_slider.get())
-        images_per_grid = grid_size * grid_size
-
-        # Determine the start index for the images
-        start_index = slider_value
-
-        # Ensure the start index is within bounds
-        if start_index + images_per_grid > len(self.images):
-            start_index = len(self.images) - images_per_grid
-        
-        # Display the images within the bounds
-        self.canvas.delete("all")
-        self.tk_images = []
-        self.image_ids = []
-        for i in range(images_per_grid):
-            img_index = start_index + i
-            if img_index >= len(self.images):
-                break
-
-            img = self.images[img_index]
-            canvas_width = self.canvas.winfo_width()
-            canvas_height = self.canvas.winfo_height()
-            cell_width = canvas_width / grid_size
-            cell_height = canvas_height / grid_size
-            h, w = img.size
-
-            img_width = int(w * cell_width / w)
-            img_height = int(h * cell_height / h)
-            img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
-            tk_img = ImageTk.PhotoImage(img)
-            self.tk_images.append(tk_img)
-
-            row = i // grid_size
-            col = i % grid_size
-            x_position = col * cell_width
-            y_position = row * cell_height
-            image_id = self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
-            self.image_ids.append(image_id)  # Save the image ID
-
     def on_canvas_click(self, event):
         """Handle mouse click events on the canvas."""
-        # Get the click coordinates
         x, y = event.x, event.y
 
         # Get the grid size from the entry field
@@ -245,97 +211,159 @@ class ImageDisplayApp(tk.Tk):
         if row >= grid_size or col >= grid_size:
             return
 
+        start_index = int(self.image_slider.get())
+
         # Calculate the index of the clicked image
-        index = row * grid_size + col
+        index = row * grid_size + col + start_index
 
         if index >= len(self.images):
             return
 
         # Open the selected image in a new window and add points
         selected_image = self.images[index]
-        self.open_image_for_annotation(selected_image, index)
+        self.add_points(selected_image, index)
+        
 
-    def open_image_for_annotation(self, image, index):
-        """Open an image in a new window to add points and propagate results."""
-        # Create a new top-level window
-        annotation_window = tk.Toplevel(self)
-        annotation_window.title("Add Points to Image")
 
-        # Convert PIL image to Tkinter ImageTk.PhotoImage
-        tk_image = ImageTk.PhotoImage(image)
+    def save_points_to_file(self, frame_number):
+        """Save points and labels to a .txt file."""
+        filename = os.path.join(self.mask_dir, f'{frame_number:05d}.txt')
+        with open(filename, 'w') as file:
+            for point, label in zip(self.points, self.labels):
+                file.write(f"{point[0]}, {point[1]}, {label}\n")
+        print(f"Points saved to {filename}")
 
-        # Create a canvas for the image
-        image_canvas = tk.Canvas(annotation_window, width=image.width, height=image.height)
-        image_canvas.pack()
 
-        # Display the image on the canvas
-        image_canvas.create_image(0, 0, anchor='nw', image=tk_image)
-
-        # Store the image reference
-        image_canvas.image = tk_image
-
-        # Create lists to store points and labels
+    def add_points(self, image, frame_number):
+        """Function to handle adding points to an image and updating the mask."""
         self.points = []
         self.labels = []
 
-        # Bind mouse click event to add points
-        image_canvas.bind("<Button-1>", lambda event, img_index=index: self.add_point(event, img_index, label=1))  # Left click
-        image_canvas.bind("<Button-3>", lambda event, img_index=index: self.add_point(event, img_index, label=0))  # Right click
+        # Create a new top-level window for annotation
+        annotation_window = tk.Toplevel(self)
+        annotation_window.title("Add Points to Image")
 
-        # Add a button to confirm and close the annotation window
-        confirm_button = ttk.Button(annotation_window, text="Confirm", command=lambda: self.propagate_annotation(index, annotation_window))
-        confirm_button.pack()
+        # Define event handlers
+        def on_click(event):
+            ix, iy = int(event.xdata), int(event.ydata)
+            if event.button == 1:  # Left click
+                print(f"Left click at ({ix}, {iy}) - 1")
+                self.points.append([ix, iy])
+                self.labels.append(1)
+            elif event.button == 3:  # Right click
+                print(f"Right click at ({ix}, {iy}) - 0")
+                self.points.append([ix, iy])
+                self.labels.append(0)
+            update_mask(frame_number)
 
-    def add_point(self, event, index, label):
-        """Add a point to the list of points and labels."""
-        x, y = event.x, event.y
-        self.points.append((x, y))
-        self.labels.append(label)
-        click_type = "Left" if label == 1 else "Right"
-        print(f"Added {click_type} click at ({x}, {y}) to image index {index}")
+        def on_key_press(event):
+            if event.key == "Backspace":
+                if self.points:
+                    self.points.pop()
+                    self.labels.pop()
+                    update_mask(frame_number)
 
-    def propagate_annotation(self, index, window):
-        """Propagate the annotations and close the annotation window."""
-        # Assuming `predictor` has a method to update annotations
-        if self.inference_state and predictor:
-            img_path = self.image_paths[index]
-            img = cv2.imread(img_path)
-            if img is None:
-                print(f"Error reading image {img_path}")
-                return
+        def update_mask(frame_number):
+            if self.points and self.labels:
+                points_np = np.array(self.points, dtype=np.float32)
+                labels_np = np.array(self.labels, dtype=np.float32)
+
+                _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
+                    inference_state=self.inference_state,
+                    frame_idx=frame_number,
+                    obj_id=int(self.ann_obj_id),
+                    points=points_np,
+                    labels=labels_np,
+                )
+                
+                mask = (out_mask_logits[0] > 0.0).squeeze().cpu().numpy().astype(np.uint8) * 255
             
-            print(f"Performing prediction on image {img_path} with points {self.points} and labels {self.labels}")
-            points = np.array(self.points)
-            labels = np.array(self.labels)
+                # Speichere die Maske als Bilddatei
+                mask_image = Image.fromarray(mask)
+                mask_image.save(os.path.join(self.mask_dir, f'mask_{frame_number:05d}.png'))
 
-            try:
-                # Add points and propagate results
-                segmentation_result = predictor.predict(img, points, labels)  # Ensure your predictor accepts labels
-                if segmentation_result is None:
-                    print(f"Prediction failed for image {img_path}")
-                else:
-                    print(f"Prediction successful for image {img_path}")
-                    self.save_segmentation_result(segmentation_result, img_path)
-            except Exception as e:
-                print(f"Error during prediction: {e}")
+                
 
-        window.destroy()
+                # Clear previous plot and update the mask
+                ax.clear()
+                ax.imshow(image, aspect='auto')
+                ax.axis('off')  # Ensure axes are completely off
+                show_points(points_np, labels_np, ax)
+                show_mask((out_mask_logits[0] > 0.0).cpu().numpy(), ax, obj_id=out_obj_ids[0])
+                canvas.draw()
+        
+        def show_mask(mask, ax, obj_id=None, random_color=False):
+            if random_color:
+                color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
+            else:
+                cmap = plt.get_cmap("tab10")
+                cmap_idx = 0 if obj_id is None else obj_id
+                color = np.array([*cmap(cmap_idx)[:3], 0.6])
+            h, w = mask.shape[-2:]
+            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
+            ax.imshow(mask_image, alpha=0.5)
+
+        def show_points(coords, labels, ax, marker_size=200):
+            pos_points = coords[labels==1]
+            neg_points = coords[labels==0]
+            ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
+            ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
+
+        def on_close():
+            print("closed")
+            self.save_points_to_file(frame_number)
+            annotation_window.destroy()
+
+        # Create a Matplotlib figure and axis for the image
+        fig = plt.Figure(figsize=(6, 6), dpi=100)
+        ax = fig.add_subplot(111)
+        ax.imshow(image, aspect='auto')
+        ax.axis('off')
+
+        # Create a canvas for the Matplotlib figure in the new window
+        canvas = FigureCanvasTkAgg(fig, master=annotation_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
+
+        # Bind mouse click and key press events
+        fig.canvas.mpl_connect('button_press_event', on_click)
+        fig.canvas.mpl_connect('key_press_event', on_key_press)
 
 
 
-    def save_segmentation_result(self, segmentation_result, img_path):
-        """Save the segmentation result to an output directory."""
-        if not self.output_dir:
-            self.output_dir = filedialog.askdirectory(title="Select Output Directory")
-        if not self.output_dir:
-            return
+        annotation_window.protocol("WM_DELETE_WINDOW", on_close)
 
-        # Save the result
-        base_name = os.path.basename(img_path)
-        output_path = os.path.join(self.output_dir, base_name)
-        cv2.imwrite(output_path, segmentation_result)
-        print(f"Saved segmentation result to {output_path}")
+    def show_propagated_images(self):
+        # Run propagation throughout the video and collect the results in a dict
+        video_segments = {}  # video_segments contains the per-frame segmentation results
+        
+        for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state):
+            video_segments[out_frame_idx] = {
+                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                for i, out_obj_id in enumerate(out_obj_ids)
+            }
+
+        # Render and save the segmentation results only for the propagated frames
+        
+        result_dir = os.path.join(self.frame_dir, "propagated_frames")
+        os.makedirs(result_dir, exist_ok=True)  # Create the directory if it doesn't exist
+
+        for out_frame_idx in sorted(video_segments.keys()):
+            plt.figure(figsize=(6, 4))
+            plt.axis('off')  # Remove axes   
+            
+            # Save the mask image with an increasing index
+            plt.savefig(os.path.join(result_dir, f'{out_frame_idx:05d}.png'), bbox_inches='tight', pad_inches=0)
+            plt.clf()  # Clear the figure to prevent overlapping of images
+
+
+    def run(self):
+        """Start the Tkinter event loop."""
+        self.initialized = True
+        self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
+        self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
+        self.mainloop()
 
 if __name__ == "__main__":
     app = ImageDisplayApp()
-    app.mainloop()
+    app.run()
