@@ -3,10 +3,10 @@ import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from tkinter import Tk, Canvas
-from PIL import Image, ImageTk
+from tkinter import Tk
+from PIL import Image
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from sam2.build_sam import build_sam2_video_predictor
+from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import re
 
 # use bfloat16 for the entire notebook

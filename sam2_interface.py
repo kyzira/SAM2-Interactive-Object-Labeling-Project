@@ -2,18 +2,13 @@
 This Programm loads images from a directory and lets you iteractively use SAM2 to track an object through the video
 """
 
-
-
-
-
-
 import tkinter as tk
 from tkinter import ttk, filedialog
 from PIL import Image, ImageTk
 import torch
 import os
 import numpy as np
-from sam2.build_sam import build_sam2_video_predictor
+from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
@@ -31,7 +26,7 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
-    def __init__(self):
+    def __init__(self, video_dir = ""):
         super().__init__()
         self.title("Image Grid Display with Input Field")
         self.geometry("1000x1000")
@@ -81,13 +76,20 @@ class ImageDisplayApp(tk.Tk):
         self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
+        self.select_directory(video_dir)
+
+        
 
 
 
 
-    def select_directory(self):
+    def select_directory(self, video_dir):
         """Open a directory dialog and load images from the selected directory."""
-        directory = filedialog.askdirectory()
+        if video_dir == "":
+            directory = filedialog.askdirectory()
+        else:
+            directory = video_dir
+
         if directory:
             self.images = []
             self.image_paths = []
@@ -100,14 +102,14 @@ class ImageDisplayApp(tk.Tk):
             print(f"Loaded {len(self.images)} images from {directory}")
             self.frame_dir = directory  # Save directory path
             self.mask_dir = os.path.join(self.frame_dir, "masks")
-            os.makedirs(self.mask_dir, exist_ok=True)
-
-            self.update_grid()  # Refresh the grid and slider based on new images
+            os.makedirs(self.mask_dir, exist_ok=True)     
 
             # Initialize predictor state
             if not self.predictor_initialized:
                 self.inference_state = predictor.init_state(video_path=self.frame_dir)
                 self.predictor_initialized = True
+            
+            self.update_grid()  # Refresh the grid and slider based on new images
 
     def display_images(self, *args):
         """Displays images in a grid format on the canvas."""
@@ -162,7 +164,7 @@ class ImageDisplayApp(tk.Tk):
                 mask = Image.open(mask_file).convert("1")  # Load mask as grayscale
 
                 # Create a red overlay with the same dimensions as the image
-                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 128))  # Red color with 50% transparency
+                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 100))  # Red color with 40% transparency
 
                 # Convert the mask to binary and apply it
                 mask_binary = mask.point(lambda p: p > 128 and 255)  # Binarize mask (white areas are 255)
@@ -199,6 +201,7 @@ class ImageDisplayApp(tk.Tk):
 
             if grid_size < 1:
                 raise ValueError("Grid size must be greater than 0.")
+
 
             print("Grid updated: Size = {}".format(grid_size))
 
@@ -378,10 +381,6 @@ class ImageDisplayApp(tk.Tk):
                 for i, out_obj_id in enumerate(out_obj_ids)
             }
 
-        # Render and save the segmentation results only for the propagated frames
-        
-        
-          # Create the directory if it doesn't exist
 
         for out_frame_idx, masks in video_segments.items():
             for out_obj_id, out_mask in masks.items():
@@ -406,8 +405,12 @@ class ImageDisplayApp(tk.Tk):
         self.initialized = True
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
         self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
+
+        self.update_idletasks()
+        self.update()
+        self.update_grid()
         self.mainloop()
 
 if __name__ == "__main__":
-    app = ImageDisplayApp()
+    app = ImageDisplayApp(video_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1")
     app.run()
