@@ -8,9 +8,12 @@ from PIL import Image, ImageTk
 import torch
 import os
 import numpy as np
+import cv2
 from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import convert_video_to_frames
+
 
 # Initialize the predictor as needed
 sam2_checkpoint = r"C:\Users\K3000\segment-anything-2\checkpoints\sam2_hiera_large.pt"
@@ -26,10 +29,10 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
-    def __init__(self, video_dir = ""):
+    def __init__(self, frame_dir = None):
         super().__init__()
         self.title("Image Grid Display with Input Field")
-        self.geometry("1000x1000")
+        self.geometry("1200x1000")
         self.images = []
         self.image_paths = []
         self.initialized = False
@@ -61,6 +64,14 @@ class ImageDisplayApp(tk.Tk):
         self.select_dir_button = ttk.Button(input_frame, text="Select Directory", command=self.select_directory)
         self.select_dir_button.pack(side='left', padx=(5, 0))
 
+        # Button to select directory
+        self.more_images_back = ttk.Button(input_frame, text="extract previous images", command=self.load_more_images_back)
+        self.more_images_back.pack(side='left', padx=(5, 0))
+
+        # Button to select directory
+        self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=self.load_more_images_forward)
+        self.more_images_forward.pack(side='left', padx=(5, 0))
+
         # Slider Frame
         self.slider_frame = tk.Frame(self)
         self.slider_frame.pack(side='bottom', fill='x', padx=10, pady=5)
@@ -72,23 +83,191 @@ class ImageDisplayApp(tk.Tk):
         self.points = []
         self.labels = []
         self.inference_state = None
-        self.frame_dir = None
+        self.frame_dir = frame_dir
         self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
-        self.select_directory(video_dir)
+        self.select_directory()
+
+
+
+    def detect_framerate(self):
+        num1 = None
+        num2 = None
+        frame_files = []
+
+        # Iterate through the files in the directory
+        for file_name in os.listdir(self.frame_dir):
+            file_path = os.path.join(self.frame_dir, file_name)
+            
+            # Skip directories
+            if os.path.isdir(file_path):
+                continue
+            
+            try:
+                # Extract frame number from the file name
+                frame_number = int(file_name.split(".")[0].lstrip("0"))
+                frame_files.append(frame_number)
+            except ValueError:
+                # Skip files that cannot be converted to an integer
+                continue
+
+        # Ensure there are enough frame files to determine framerate
+        if len(frame_files) < 2:
+            print("Not enough numeric frame files to determine framerate.")
+            return None, None, None
+
+        # Sort frame numbers to calculate framerate
+        frame_files = sorted(frame_files)
+        num1 = frame_files[0]
+        num2 = frame_files[1]
+
+        last_num = frame_files[-1]
+        framerate = num2 - num1
+        print(f"Frame numbers detected: {num1}, {num2}")
+        print(f"Framerate: {framerate}")
+
+        return framerate, num1, last_num
+
+    def find_video_path(self):
+        """Find the video file that corresponds to the frame directory."""
+        # Get the directory name, which is expected to be the same as the video name
+        video_name = os.path.basename(self.frame_dir)
+        
+        # Look for video files in the parent directory of the frame directory
+        parent_dir = os.path.dirname(self.frame_dir)
+        
+        # Possible video extensions, including common variations
+        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.mpg']
+        
+        # Search for the video file
+        for ext in video_extensions:
+            # Check for both lowercase and uppercase versions of the extension
+            for case_ext in [ext, ext.upper()]:
+                potential_video_path = os.path.join(parent_dir, video_name + case_ext)
+                if os.path.isfile(potential_video_path):
+                    return potential_video_path
+        
+        # If the video file is not found in the parent directory, you can search deeper or in other known directories
+        # For now, return None if not found
+        return None
+
+
 
         
+    def load_more_images_back(self):
+        """Load previous images."""
+        if not self.initialized:
+            return  # Do nothing if not initialized
+        
+        framerate, end_frame, _ = self.detect_framerate()
+        
+        if end_frame is None:
+            print("Error: Could not detect frame rate or end frame.")
+            return
+
+        video_path = self.find_video_path()
+
+        if not video_path:
+            print("Error: Video path not found.")
+            return
+
+        if end_frame > 5 * framerate:
+            start_frame = end_frame - 5 * framerate
+            end_frame = end_frame - framerate
+        elif end_frame > framerate:
+            end_frame = end_frame - framerate
+            start_frame = 0
+        else: 
+            return
+
+        print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
+        
+        convert_video_to_frames.convert_video(video_path, start_frame, end_frame, framerate)
+
+        # Clear existing images
+        self.images = []
+        self.image_paths = []
+        
+        # Load images from the directory
+        for file_name in sorted(os.listdir(self.frame_dir)):
+            file_path = os.path.join(self.frame_dir, file_name)
+            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                self.image_paths.append(file_path)
+                img = Image.open(file_path)
+                self.images.append(img)
+        
+        if not self.images:
+            print("No images loaded. Please check the directory or image file formats.")
+            return
+        
+        print(f"Loaded {len(self.images)} images from {self.frame_dir}")
+
+        self.inference_state = predictor.init_state(video_path=self.frame_dir)
+        predictor.reset_state(self.inference_state)
+        self.update_grid()
 
 
 
 
-    def select_directory(self, video_dir):
-        """Open a directory dialog and load images from the selected directory."""
-        if video_dir == "":
-            directory = filedialog.askdirectory()
+
+
+    def load_more_images_forward(self):
+        if not self.initialized:
+            return  # Do nothing if not initialized
+        
+        framerate, _, last_num = self.detect_framerate()
+
+        video_path = self.find_video_path()
+
+        video_capture = cv2.VideoCapture(video_path)
+        total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        video_capture.release()
+
+        if total_frames > last_num + framerate * 5:
+            end_frame = last_num + framerate * 5
+            start_frame = last_num + framerate
+        elif total_frames > last_num + framerate:
+            end_frame = total_frames
+            start_frame = last_num + framerate
         else:
-            directory = video_dir
+            return
+
+        print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
+        
+        convert_video_to_frames.convert_video(video_path, start_frame, end_frame, framerate)
+
+         # Clear existing images
+        self.images = []
+        self.image_paths = []
+        
+        # Load images from the directory
+        for file_name in sorted(os.listdir(self.frame_dir)):
+            file_path = os.path.join(self.frame_dir, file_name)
+            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                self.image_paths.append(file_path)
+                img = Image.open(file_path)
+                self.images.append(img)
+        
+        if not self.images:
+            print("No images loaded. Please check the directory or image file formats.")
+            return
+        
+        print(f"Loaded {len(self.images)} images from {self.frame_dir}")
+
+        self.inference_state = predictor.init_state(video_path=self.frame_dir)
+        predictor.reset_state(self.inference_state)
+        self.update_grid()
+
+
+
+
+    def select_directory(self):
+        """Open a directory dialog and load images from the selected directory."""
+        if not self.frame_dir:
+            self.frame_dir = filedialog.askdirectory()
+        
+        directory = self.frame_dir
 
         if directory:
             self.images = []
@@ -100,7 +279,6 @@ class ImageDisplayApp(tk.Tk):
                     img = Image.open(file_path)
                     self.images.append(img)
             print(f"Loaded {len(self.images)} images from {directory}")
-            self.frame_dir = directory  # Save directory path
             self.mask_dir = os.path.join(self.frame_dir, "masks")
             os.makedirs(self.mask_dir, exist_ok=True)     
 
@@ -143,7 +321,6 @@ class ImageDisplayApp(tk.Tk):
 
         start_index = int(self.image_slider.get())
 
-        
         self.image_ids = []  
         self.tk_images = []
 
@@ -151,14 +328,17 @@ class ImageDisplayApp(tk.Tk):
             img_index = start_index + i
             if img_index >= len(self.images):
                 break
-            
+
+            img_path = self.image_paths[img_index]
             img = self.images[img_index]
             img_width = int(cell_width)
             img_height = int(cell_height)
-            
 
-            mask_file = os.path.join(self.mask_dir, f"mask_{img_index:05d}.png")
-            
+            # Extract the base filename without extension
+            base_filename = os.path.splitext(os.path.basename(img_path))[0]
+
+            # Construct the path for the mask file using the base filename
+            mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
 
             if os.path.isfile(mask_file):
                 mask = Image.open(mask_file).convert("1")  # Load mask as grayscale
@@ -189,6 +369,8 @@ class ImageDisplayApp(tk.Tk):
             y_position = row * cell_height
             image_id = self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
             self.image_ids.append(image_id)  # Save the image ID
+
+
 
     def update_grid(self):
         """Update the grid size and slider based on the input field value."""
@@ -264,11 +446,24 @@ class ImageDisplayApp(tk.Tk):
 
     def save_points_to_file(self, frame_number):
         """Save points and labels to a .txt file."""
-        filename = os.path.join(self.mask_dir, f'{frame_number:05d}.txt')
-        with open(filename, 'w') as file:
+        # Get the image path for the current frame
+        if frame_number >= len(self.image_paths):
+            print("Frame number out of range")
+            return
+
+        img_path = self.image_paths[frame_number]
+        base_filename = os.path.splitext(os.path.basename(img_path))[0]
+
+        # Construct the filename for saving points
+        points_file = os.path.join(self.mask_dir, f'{base_filename}.txt')
+
+        with open(points_file, 'w') as file:
             for point, label in zip(self.points, self.labels):
                 file.write(f"{point[0]}, {point[1]}, {label}\n")
-        print(f"Points saved to {filename}")
+
+        print(f"Points saved to {points_file}")
+
+
 
 
     def add_points(self, image, frame_number):
@@ -276,29 +471,39 @@ class ImageDisplayApp(tk.Tk):
         self.points = []
         self.labels = []
 
+        # Convert the PIL image to a NumPy array
+        image_np = np.array(image)
+
         # Create a new top-level window for annotation
         annotation_window = tk.Toplevel(self)
         annotation_window.title("Add Points to Image")
 
         # Define event handlers
         def on_click(event):
-            ix, iy = int(event.xdata), int(event.ydata)
-            if event.button == 1:  # Left click
-                print(f"Left click at ({ix}, {iy}) - 1")
-                self.points.append([ix, iy])
-                self.labels.append(1)
-            elif event.button == 3:  # Right click
-                print(f"Right click at ({ix}, {iy}) - 0")
-                self.points.append([ix, iy])
-                self.labels.append(0)
-            update_mask(frame_number)
+            if event.xdata is not None and event.ydata is not None:
+                ix, iy = int(event.xdata), int(event.ydata)
+                if event.button == 1:  # Left click
+                    print(f"Left click at ({ix}, {iy}) - 1")
+                    self.points.append([ix, iy])
+                    self.labels.append(1)
+                elif event.button == 3:  # Right click
+                    print(f"Right click at ({ix}, {iy}) - 0")
+                    self.points.append([ix, iy])
+                    self.labels.append(0)
+                update_mask(frame_number)
 
         def on_key_press(event):
-            if event.key == "Backspace":
+            if event.key == "backspace":
                 if self.points:
                     self.points.pop()
                     self.labels.pop()
                     update_mask(frame_number)
+                else:
+                    # Clear the mask and show the original image if no points are left
+                    ax.clear()
+                    ax.imshow(image_np, aspect='equal')
+                    ax.axis('off')
+                    canvas.draw()
 
         def update_mask(frame_number):
             if self.points and self.labels:
@@ -313,22 +518,20 @@ class ImageDisplayApp(tk.Tk):
                     labels=labels_np,
                 )
                 
-                mask = (out_mask_logits[0] > 0.0).squeeze().cpu().numpy().astype(np.uint8) * 255
-            
-                # Speichere die Maske als Bilddatei
-                mask_image = Image.fromarray(mask)
-                mask_image.save(os.path.join(self.mask_dir, f'mask_{frame_number:05d}.png'))
-
-                
-
                 # Clear previous plot and update the mask
                 ax.clear()
-                ax.imshow(image, aspect='auto')
+                ax.imshow(image_np, aspect='equal')  # Maintain aspect ratio
                 ax.axis('off')  # Ensure axes are completely off
                 show_points(points_np, labels_np, ax)
                 show_mask((out_mask_logits[0] > 0.0).cpu().numpy(), ax, obj_id=out_obj_ids[0])
                 canvas.draw()
-        
+            else:
+                # If no points are left, clear the mask and show the original image
+                ax.clear()
+                ax.imshow(image_np, aspect='equal')
+                ax.axis('off')
+                canvas.draw()
+
         def show_mask(mask, ax, obj_id=None, random_color=False):
             if random_color:
                 color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
@@ -341,8 +544,8 @@ class ImageDisplayApp(tk.Tk):
             ax.imshow(mask_image, alpha=0.5)
 
         def show_points(coords, labels, ax, marker_size=200):
-            pos_points = coords[labels==1]
-            neg_points = coords[labels==0]
+            pos_points = coords[labels == 1]
+            neg_points = coords[labels == 0]
             ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
             ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
 
@@ -355,7 +558,9 @@ class ImageDisplayApp(tk.Tk):
         # Create a Matplotlib figure and axis for the image
         fig = plt.Figure(figsize=(6, 6), dpi=100)
         ax = fig.add_subplot(111)
-        ax.imshow(image, aspect='auto')
+
+        # Display the image
+        ax.imshow(image_np, aspect='equal')
         ax.axis('off')
 
         # Create a canvas for the Matplotlib figure in the new window
@@ -367,20 +572,21 @@ class ImageDisplayApp(tk.Tk):
         fig.canvas.mpl_connect('button_press_event', on_click)
         fig.canvas.mpl_connect('key_press_event', on_key_press)
 
-
-
         annotation_window.protocol("WM_DELETE_WINDOW", on_close)
 
+
+
+
+
     def show_propagated_images(self):
-        # Run propagation throughout the video and collect the results in a dict
+        """Run propagation throughout the video and save the results."""
         video_segments = {}  # video_segments contains the per-frame segmentation results
-        
+
         for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state):
             video_segments[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                 for i, out_obj_id in enumerate(out_obj_ids)
             }
-
 
         for out_frame_idx, masks in video_segments.items():
             for out_obj_id, out_mask in masks.items():
@@ -390,12 +596,21 @@ class ImageDisplayApp(tk.Tk):
                 # Convert the mask to a PIL image
                 if out_mask.ndim == 2:  # If the mask is 2D, proceed
                     out_mask_img = Image.fromarray((out_mask * 255).astype('uint8'))
-                    # Save the mask image with an increasing index
-                    out_mask_img.save(os.path.join(self.mask_dir, f'mask_{out_frame_idx:05d}.png'))
+
+                    # Construct the filename for saving the mask
+                    # Use the base filename for the mask based on the frame number
+                    img_path = self.image_paths[out_frame_idx]
+                    base_filename = os.path.splitext(os.path.basename(img_path))[0]
+                    mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
+
+                    # Save the mask image with the constructed filename
+                    out_mask_img.save(mask_file)
                 else:
                     print(f"Unexpected mask shape: {out_mask.shape}")
-        
+
         self.update_grid()
+
+
             
         
             
@@ -411,6 +626,14 @@ class ImageDisplayApp(tk.Tk):
         self.update_grid()
         self.mainloop()
 
+
+
+
+
 if __name__ == "__main__":
-    app = ImageDisplayApp(video_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1")
+
+    # convert_video_to_frames.convert_video(input_path, start_frame, end_frame, frame_rate)
+
+    app = ImageDisplayApp(frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1")
     app.run()
+

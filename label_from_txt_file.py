@@ -45,7 +45,7 @@ def show_propagated_images():
             if out_mask.ndim == 2:  # If the mask is 2D, proceed
                 out_mask_img = Image.fromarray((out_mask * 255).astype('uint8'))
                 # Save the mask image with an increasing index
-                out_mask_img.save(os.path.join(mask_dir,"mask_ony_with_txt", f'mask_{out_frame_idx:05d}.png'))
+                out_mask_img.save(os.path.join(mask_dir,"mask_ony_with_txt", f'{out_frame_idx:05d}.png'))
             else:
                     print(f"Unexpected mask shape: {out_mask.shape}")
 

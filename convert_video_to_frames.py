@@ -2,35 +2,50 @@ import os
 import cv2
 
 
-def convert_video(input_path = "", start_frame = 0, end_frame = -1, frame_rate = 1):
+def convert_video(input_path="", start_frame=0, end_frame=-1, frame_rate=1):
     if input_path == "":
         input_path = input("Video Path (without quotes): ").strip()
 
+    # Split the input path to get the base name and create frame directory
     path_splits = os.path.normpath(input_path).split(os.path.sep)
     base_name = os.path.splitext(path_splits[-1])[0]
     input_dir = os.path.dirname(input_path)
     frame_dir = os.path.join(input_dir, f"{base_name}")
     os.makedirs(frame_dir, exist_ok=True)
+
+    # Open the video file
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         print(f"Error opening video file: {input_path}")
         return
-    print("Successfully opened the video! \nSaving frames:")
+
+    # Get total number of frames in the video
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f"Total frames in video: {total_frames}")
+
+    if end_frame == -1 or end_frame > total_frames:
+        end_frame = total_frames
+
+    print(f"Extracting frames from {start_frame} to {end_frame} with a frame rate of {frame_rate}.")
+
     frame_number = start_frame
 
-
-    while True:
+    while frame_number < end_frame:
+        # Set the position of the next frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
 
-        if not ret or frame_number >= end_frame:
+        if not ret:
+            print(f"Failed to read frame {frame_number}.")
             break
 
         output_filename = os.path.join(frame_dir, f'{frame_number:05d}.jpg')
         cv2.imwrite(output_filename, frame)
 
-        # Move to the next frame according to the frame_rate
+        print(f"Saved frame {frame_number} to {output_filename}")
+
+        # Move to the next frame
         frame_number += frame_rate
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
 
     cap.release()
     print(f"Frames have been saved to {frame_dir}.")
@@ -56,6 +71,12 @@ def rename_images_in_directory(directory):
             print(f"Failed to load {file_name}")
 
 
-convert_video(r"C:\Users\K3000\Videos\Filme\SD\Ohne OSD\KI_1.MPG", 0, 250, 5)
+
+
+
+
+
+if __name__ == "__main__":
+    convert_video(r"C:\Users\K3000\Videos\Filme\SD\Ohne OSD\KI_1.MPG", 0, 250, 5)
 
 
