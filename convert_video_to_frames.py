@@ -2,15 +2,23 @@ import os
 import cv2
 
 
-def convert_video(input_path="", start_frame=0, end_frame=-1, frame_rate=1):
+def convert_video(input_path="", output_path="", start_frame=None, end_frame=None, damage_second=None, frame_rate=1):
     if input_path == "":
         input_path = input("Video Path (without quotes): ").strip()
+
+    rewind_seconds = 15
+    proceed_seconds = 10
+
 
     # Split the input path to get the base name and create frame directory
     path_splits = os.path.normpath(input_path).split(os.path.sep)
     base_name = os.path.splitext(path_splits[-1])[0]
     input_dir = os.path.dirname(input_path)
-    frame_dir = os.path.join(input_dir, f"{base_name}")
+
+    if output_path == "":
+        output_path = os.path.join(input_dir, f"{base_name}")
+
+    frame_dir = output_path
     os.makedirs(frame_dir, exist_ok=True)
 
     # Open the video file
@@ -18,13 +26,30 @@ def convert_video(input_path="", start_frame=0, end_frame=-1, frame_rate=1):
     if not cap.isOpened():
         print(f"Error opening video file: {input_path}")
         return
-
+    
     # Get total number of frames in the video
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Total frames in video: {total_frames}")
 
-    if end_frame == -1 or end_frame > total_frames:
+    if damage_second and not (start_frame and end_frame):
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        damage_frame = damage_second * fps
+        start_frame = int(damage_frame - rewind_seconds * fps)
+        end_frame = int(damage_frame - proceed_seconds * fps)
+
+        if start_frame < 0:
+            start_frame = 0
+        if end_frame > total_frames:
+            end_frame = total_frames
+
+    elif not (start_frame and end_frame):
+        start_frame = 0
         end_frame = total_frames
+
+
+    if end_frame > total_frames:
+        end_frame = total_frames
+
 
     print(f"Extracting frames from {start_frame} to {end_frame} with a frame rate of {frame_rate}.")
 

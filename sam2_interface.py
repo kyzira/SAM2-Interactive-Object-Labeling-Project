@@ -29,7 +29,7 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
-    def __init__(self, frame_dir = None):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None):
         super().__init__()
         self.title("Image Grid Display with Input Field")
         self.geometry("1200x1000")
@@ -88,6 +88,8 @@ class ImageDisplayApp(tk.Tk):
         self.output_dir = None
         self.predictor_initialized = False
         self.select_directory()
+        self.video_path = video_path
+        self.frame_rate = frame_rate
 
 
 
@@ -128,6 +130,9 @@ class ImageDisplayApp(tk.Tk):
         print(f"Framerate: {framerate}")
 
         return framerate, num1, last_num
+    
+
+
 
     def find_video_path(self):
         """Find the video file that corresponds to the frame directory."""
@@ -160,32 +165,33 @@ class ImageDisplayApp(tk.Tk):
         if not self.initialized:
             return  # Do nothing if not initialized
         
-        framerate, end_frame, _ = self.detect_framerate()
+        frame_rate, end_frame, _ = self.detect_framerate()
         
         if end_frame is None:
             print("Error: Could not detect frame rate or end frame.")
             return
+        
+        if not self.video_path:
+            self.video_path = self.find_video_path()
 
-        video_path = self.find_video_path()
+        video_path = self.video_path
 
         if not video_path:
             print("Error: Video path not found.")
             return
 
-        if end_frame > 5 * framerate:
-            start_frame = end_frame - 5 * framerate
-            end_frame = end_frame - framerate
-        elif end_frame > framerate:
-            end_frame = end_frame - framerate
+        if end_frame > 8 * frame_rate:
+            start_frame = end_frame - 8 * frame_rate
+            end_frame = end_frame - frame_rate
+        elif end_frame > frame_rate:
+            end_frame = end_frame - frame_rate
             start_frame = 0
         else: 
             return
 
         print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
         
-        convert_video_to_frames.convert_video(video_path, start_frame, end_frame, framerate)
-
-        # Clear existing images
+        convert_video_to_frames.convert_video(input_path=video_path, start_frame=start_frame, end_frame=end_frame, frame_rate=frame_rate, output_path=self.frame_dir)
         self.images = []
         self.image_paths = []
         
@@ -216,26 +222,29 @@ class ImageDisplayApp(tk.Tk):
         if not self.initialized:
             return  # Do nothing if not initialized
         
-        framerate, _, last_num = self.detect_framerate()
+        frame_rate, _, last_num = self.detect_framerate()
 
-        video_path = self.find_video_path()
+        if not self.video_path:
+            self.video_path = self.find_video_path()
+
+        video_path = self.video_path
 
         video_capture = cv2.VideoCapture(video_path)
         total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
         video_capture.release()
 
-        if total_frames > last_num + framerate * 5:
-            end_frame = last_num + framerate * 5
-            start_frame = last_num + framerate
-        elif total_frames > last_num + framerate:
+        if total_frames > last_num + frame_rate * 8:
+            end_frame = last_num + frame_rate * 8
+            start_frame = last_num + frame_rate
+        elif total_frames > last_num + frame_rate:
             end_frame = total_frames
-            start_frame = last_num + framerate
+            start_frame = last_num + frame_rate
         else:
             return
 
         print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
         
-        convert_video_to_frames.convert_video(video_path, start_frame, end_frame, framerate)
+        convert_video_to_frames.convert_video(input_path=video_path, start_frame=start_frame, end_frame=end_frame, frame_rate=frame_rate, output_path=self.frame_dir)
 
          # Clear existing images
         self.images = []
@@ -631,9 +640,6 @@ class ImageDisplayApp(tk.Tk):
 
 
 if __name__ == "__main__":
-
-    # convert_video_to_frames.convert_video(input_path, start_frame, end_frame, frame_rate)
-
     app = ImageDisplayApp(frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1")
     app.run()
 
