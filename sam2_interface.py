@@ -41,7 +41,7 @@ class ImageDisplayApp(tk.Tk):
         self.ann_obj_id = 1
 
         # Initialize canvas
-        self.canvas = tk.Canvas(self, width=800, height=600, bg='white')
+        self.canvas = tk.Canvas(self, width=1000, height=800, bg='white')
         self.canvas.pack(fill='both', expand=True)
 
         # Frame to hold the input field, button, and directory selection
@@ -53,7 +53,7 @@ class ImageDisplayApp(tk.Tk):
 
         # Entry field with specified width
         self.grid_entry = tk.Entry(input_frame, width=10)  # Set the width here
-        self.grid_entry.insert(0, '3')
+        self.grid_entry.insert(0, '5')
         self.grid_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
 
         # Button for updating grid
@@ -246,7 +246,7 @@ class ImageDisplayApp(tk.Tk):
         
         convert_video_to_frames.convert_video(input_path=video_path, start_frame=start_frame, end_frame=end_frame, frame_rate=frame_rate, output_path=self.frame_dir)
 
-         # Clear existing images
+        # Clear existing images
         self.images = []
         self.image_paths = []
         
@@ -596,6 +596,18 @@ class ImageDisplayApp(tk.Tk):
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                 for i, out_obj_id in enumerate(out_obj_ids)
             }
+
+
+        for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state, reverse=True):
+            if out_frame_idx not in video_segments:
+                video_segments[out_frame_idx] = {}
+            for i, out_obj_id in enumerate(out_obj_ids):
+                if out_obj_id not in video_segments[out_frame_idx]:
+                    video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
+                else:
+                    # Optionally merge or update masks if needed
+                    video_segments[out_frame_idx][out_obj_id] = np.maximum(video_segments[out_frame_idx][out_obj_id], (out_mask_logits[i] > 0.0).cpu().numpy())
+
 
         for out_frame_idx, masks in video_segments.items():
             for out_obj_id, out_mask in masks.items():

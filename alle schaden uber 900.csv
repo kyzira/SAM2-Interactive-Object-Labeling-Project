@@ -1,46 +1,46 @@
-BCAAA;22932
-BCAEA;16962
-BCADA;12818
-BAHC;12390
-BBBA;9497
-BBCC;9058
-BABBA;7283
-BAJC;6974
-BAJB;5395
-BDDB;5324
-BABBB;5161
-BCBZD;4868
-BAG;3864
-BCAGA;3730
-BCBZZ;3625
-BABAA;3624
-BAFCE;3442
-BCAZA;3269
-BCBZC;3267
-BABBC;2957
-BCABA;2781
-BBAB;2649
-BCAAB;2629
-BAFAE;2600
-BAFBE;2569
-BACB;2544
-BBBZ;2237
-BAO;2231
-BAFJE;2084
-BAAA;1933
-BCCAY;1910
-BCCBY;1821
-BDDA;1644
-BBFA;1559
-BCBZB;1532
-BBAC;1432
-BBCB;1360
-BAIZ;1294
-BDDC;1234
-BAJA;1163
-BBFC;1113
-BBCA;1101
-BAHB;1081
-BCACA;937
-BCCYB;930
-BAP;898
+BCAAA;22932;Bestandsaufnahme | Anschluss | Abzweig | Anschluss offen # Abzweig
+BCAEA;16962;Bestandsaufnahme | Anschluss | einfacher Anschluss - Loch gemeißelt | Anschluss offen # Einfacher Anschluss - Loch gemeißelt
+BCADA;12818;Bestandsaufnahme | Anschluss | einfacher Anschluss - Loch gebohrt | Anschluss offen # Einfacher Anschluss - Loch gebohrt
+BAHC;12390;Struktur der Rohrleitungen | Schadhafter Anschluss | Anschluss unvollständig eingebunden
+BBBA;9497;Betrieb der Rohrleitungen | Anhaftende Stoffe | Inkrustation
+BBCC;9058;Betrieb der Rohrleitungen | Ablagerungen | hartes oder verdichtetes Material
+BABBA;7283;Struktur der Rohrleitungen | Rissbildung | Riss | in Längsrichtung
+BAJC;6974;Struktur der Rohrleitungen | Verschobene Verbindung | im Winkel
+BAJB;5395;Struktur der Rohrleitungen | Verschobene Verbindung | radial
+BDDB;5324;
+BABBB;5161;Struktur der Rohrleitungen | Rissbildung | Riss | am Rohrumfang
+BCBZD;4868;
+BAG;3864;Struktur der Rohrleitungen | Einragender Anschluss
+BCAGA;3730;Bestandsaufnahme | Anschluss | unbekannter Anschluss | Anschluss offen # Unbekannter Anschluss
+BCBZZ;3625;
+BABAA;3624;Struktur der Rohrleitungen | Rissbildung | Oberflächenriss (Haarriss) | in Längsrichtung
+BAFCE;3442;Struktur der Rohrleitungen | Oberflächenschaden | Zuschlagstoffe sichtbar | nicht eindeutig feststellbar
+BCAZA;3269;Bestandsaufnahme | Anschluss | andere Art des Anschlusses | Anschluss offen # Andere Art des Anschlusses
+BCBZC;3267;
+BABBC;2957;Struktur der Rohrleitungen | Rissbildung | Riss | komplexe Rissbildung
+BCABA;2781;Bestandsaufnahme | Anschluss | Sattelanschluss - Loch gebohrt | Anschluss offen # Sattelanschluss - Loch gebohrt
+BBAB;2649;Betrieb der Rohrleitungen | Wurzeln | einzelne feine Wurzeln
+BCAAB;2629;Bestandsaufnahme | Anschluss | Abzweig | Anschluss geschlossen # Abzweig
+BAFAE;2600;Struktur der Rohrleitungen | Oberflächenschaden | erhöhte Rauheit | nicht eindeutig feststellbar
+BAFBE;2569;Struktur der Rohrleitungen | Oberflächenschaden | Abplatzung | nicht eindeutig feststellbar
+BACB;2544;Struktur der Rohrleitungen | Rohrbruch/Einsturz | Fehlen von Teilen
+BBBZ;2237;Betrieb der Rohrleitungen | Anhaftende Stoffe | anderer Stoff
+BAO;2231;Struktur der Rohrleitungen | Boden sichtbar
+BAFJE;2084;Struktur der Rohrleitungen | Oberflächenschaden | Korrosionserscheinungen an der Oberfläche | nicht eindeutig feststellbar
+BAAA;1933;Struktur der Rohrleitungen | Verformung | vertikal
+BCCAY;1910;Bestandsaufnahme | Krümmung der Leitung | nach links | - # Krümmung der Leitung nach links
+BCCBY;1821;Bestandsaufnahme | Krümmung der Leitung | nach rechts | - # Krümmung der Leitung nach rechts
+BDDA;1644;Weitere Hauptkodes | Wasserspiegel | klar (Sohle sichtbar) # Wasserspiegel klar (Sohle sichtbar)
+BBFA;1559;Betrieb der Rohrleitungen | Infiltration | Schwitzen - langsames Eindringen von Wasser
+BCBZB;1532;
+BBAC;1432;Betrieb der Rohrleitungen | Wurzeln | komplexes Wurzelwerk
+BBCB;1360;Betrieb der Rohrleitungen | Ablagerungen | grobes Material
+BAIZ;1294;Struktur der Rohrleitungen | Einragendes Dichtungsmaterial | andere Dichtungsart
+BDDC;1234;Weitere Hauptkodes | Wasserspiegel | trüb # Wasserspiegel trüb
+BAJA;1163;Struktur der Rohrleitungen | Verschobene Verbindung | in Längsrichtung (Verschobene Verbindung)
+BBFC;1113;Betrieb der Rohrleitungen | Infiltration | Fließen - kontinuierliches Fließen
+BBCA;1101;Betrieb der Rohrleitungen | Ablagerungen | feines Material
+BAHB;1081;Struktur der Rohrleitungen | Schadhafter Anschluss | Anschluss zurückliegend
+BCACA;937;Bestandsaufnahme | Anschluss | Sattelanschluss - Loch gemeißelt | Anschluss offen # Sattelanschluss - Loch gemeißelt
+BCCYB;930;Bestandsaufnahme | Krümmung der Leitung | - | nach unten # Krümmung der Leitung nach unten
+BAP;898;Struktur der Rohrleitungen | Hohlraum sichtbar
