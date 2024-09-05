@@ -29,7 +29,7 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title= "Image Grid Display with Input Field"):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field"):
         super().__init__()
         self.title(window_title)
         self.geometry("1200x1000")

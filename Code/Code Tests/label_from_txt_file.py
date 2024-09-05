@@ -1,3 +1,9 @@
+"""
+This Code is a test to propagate all frames, only from reading the points in the txt files
+"""
+
+
+
 from PIL import Image
 import torch
 import os
