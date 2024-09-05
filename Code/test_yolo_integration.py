@@ -122,9 +122,9 @@ def find_frame_index(frame, frame_dir):
                 index += 1
 
 
-def main():
-
-    frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\aaa_short"    
+def main(frame_dir=None):
+    if frame_dir is None:
+        frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\aaa_short"       
 
     inference_state = predictor.init_state(video_path=frame_dir)
     mask_dir = os.path.join(frame_dir, "masks")
@@ -153,7 +153,7 @@ def main():
         while not (pos_points and neg_points):
             img_path, file_name = random.choice(file_list)
             pos_points, neg_points = yolo_precheck(img_path, num_of_points)
-            if autobreak > 5:
+            if autobreak > 2:
                 break
         
         frame = int(file_name.split(".")[0])
@@ -167,8 +167,6 @@ def main():
             continue
 
 
-        print(points_np)
-
         _, _, _ = predictor.add_new_points_or_box(
             inference_state=inference_state,
             frame_idx=frame_idx,
@@ -177,9 +175,6 @@ def main():
             labels=labels_np
         )
 
-
-    print("Points Inside Polygon:", pos_points)
-    print("Points Outside Polygon:", neg_points)
 
     show_propagated_images(mask_dir, inference_state)
 

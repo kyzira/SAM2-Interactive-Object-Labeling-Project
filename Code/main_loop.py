@@ -6,6 +6,7 @@ import os
 import pandas as pd
 import convert_video_to_frames as conv
 import sam2_interface as sam2
+import test_yolo_integration as yolo
 
 
 output_dir = r"C:\Code Python\automation-with-sam2\labeling_project"
@@ -60,9 +61,14 @@ while current_index <= total_length:
     conv.convert_video(input_path=input_path, output_path=current_frame_dir, damage_second=damage_second, frame_rate = frame_rate)
 
 
-    # Segment frames
-    app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title= damage_table.iloc[current_index]["Schadensbeschreibung"])
-    app.run()
+    
+    # Segment yourself:
+    # app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title= damage_table.iloc[current_index]["Schadensbeschreibung"])
+    # app.run()
+
+    # Segment with YOLO
+    yolo.main(frame_dir=current_frame_dir)
+
 
 
 
