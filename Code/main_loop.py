@@ -9,6 +9,13 @@ import sam2_interface as sam2
 import test_yolo_integration as yolo
 
 
+### True if yolo should provide points for sam or False if you want to select yourself ###
+
+auto_labeling = True
+
+
+
+
 output_dir = r"C:\Code Python\automation-with-sam2\labeling_project"
 masks_dir = os.path.join(output_dir, "masks")
 labels_dir = os.path.join(output_dir, "labels")
@@ -61,17 +68,20 @@ while current_index <= total_length:
     conv.convert_video(input_path=input_path, output_path=current_frame_dir, damage_second=damage_second, frame_rate = frame_rate)
 
 
+    if auto_labeling:
+        state = yolo.main(frame_dir=current_frame_dir)
+    else:
+        # Segment yourself:
+        app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title= damage_table.iloc[current_index]["Schadensbeschreibung"])
+        app.run()
+        state = True
+
     
-    # Segment yourself:
-    # app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title= damage_table.iloc[current_index]["Schadensbeschreibung"])
-    # app.run()
+    
 
-    # Segment with YOLO
-    yolo.main(frame_dir=current_frame_dir)
-
-
-
-
+    if not state:
+        current_index += 1
+        continue
 
     # Create label csv
     current_mask_dir = os.path.join(current_frame_dir, "masks")
