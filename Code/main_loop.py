@@ -9,8 +9,7 @@ import sam2_interface as sam2
 import test_yolo_integration as yolo
 
 
-### True if yolo should provide points for sam or False if you want to select yourself ###
-
+# True if yolo should provide points for SAM2 or False if you want to select yourself 
 auto_labeling = True
 
 

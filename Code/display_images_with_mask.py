@@ -87,17 +87,16 @@ class ImageDisplayApp(tk.Tk):
                 if os.path.isfile(potential_video_path):
                     return potential_video_path
         
-        # If the video file is not found in the parent directory, you can search deeper or in other known directories
-        # For now, return None if not found
         return None
 
 
 
 
-    def select_directory(self):
-        """Open a directory dialog and load images from the selected directory."""
-        if not self.frame_dir:
-            self.frame_dir = filedialog.askdirectory()
+    def select_directory(self, init = False):
+        # Open a directory dialog and load images from the selected directory.
+ 
+        self.frame_dir = filedialog.askdirectory()
+
         
         directory = self.frame_dir
 
@@ -115,6 +114,8 @@ class ImageDisplayApp(tk.Tk):
             os.makedirs(self.mask_dir, exist_ok=True)     
             
             self.update_grid()  # Refresh the grid and slider based on new images
+
+
 
     def display_images(self, *args):
         """Displays images in a grid format on the canvas."""
@@ -245,6 +246,7 @@ class ImageDisplayApp(tk.Tk):
         self.update_idletasks()
         self.update()
         self.update_grid()
+
         self.mainloop()
 
 
