@@ -16,7 +16,7 @@ Flow of `main_loop.py`:
     - ``auto_label = True``:
         Detect Objects and set Points using *YOLO Integration* script
     - ``auto_label = False``:
-        Use *SAM2 Interface* script to display frames and allow user to manually select Objects
+        Uses *SAM2 Interface* script to display frames and allow user to manually select Objects
 4. Segmentation with SAM2: Use SAM2 to segment the frames, saving the masks and associated .txt files with the labeled points.
 5. Labeling and CSV Creation: For each damage, create a .csv file containing:
     - Damage Type: Type of damage observed.
@@ -46,10 +46,11 @@ The ``sam2_interface.py`` script provides an intuitive interface for displaying 
 
 #### YOLO Integration
 
-The ``test_yolo_integration.py`` script incorporates YOLO into the main workflow. Here’s how it works:
+The ``yolo_integration.py`` script incorporates YOLO into the main workflow. Here’s how it works:
 
 - YOLO is shown a random frame, where it tries to detect any objects.
 - If objects are detected, the script gets the polygon coordinates and randomly selects points both inside and outside the segmentation.
+- Only accept the prediction if confidence above 0.5, if multiple predictions appear, select the one with highest confidence score.
 - These points are then fed into SAM2.
 - This process repeats a few times (e.g., 5 rounds), after which SAM2 tracks the objects across all frames.
 
@@ -60,6 +61,23 @@ The `display_images_with_mask.py` script displays a grid with images from a sele
 ## Labeling Project
 
 In this folder are the cut up frames, the masks and the generated points stored.
+
+### Files
+
+#### Current Index
+The `current_index.txt` text file only contains a single number. It shows at which line the last labeling process stopped.
+
+#### CSV List
+The `.csv` list is used for the labeling process. It contains the damage type, where the video is located and when in the video the damage is visible.
+
+### Folders
+
+#### masks
+In the `masks` folder are the cut up frames of the segmented videos stored. They are saved in subfolders, of which the name is taken from the corresponding video name.
+The subfolders contain the frames, but also another subfolder called `masks`. In these are black and white mask images of the selected areas and text files of frames, in which the selected points are saved in 
+
+#### labels
+The `labels` folder contains `.csv` lists. The lists are also named after the corresponding video. Each list shows the damage type, from which frame to which frame the segmentation was done and all the selected points, the frame in which they were set, the coordinates of the Point and if it is a positive or negative label.
 
 ## CSV Lists
 

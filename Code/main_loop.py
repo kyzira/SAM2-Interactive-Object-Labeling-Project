@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import convert_video_to_frames as conv
 import sam2_interface as sam2
-import test_yolo_integration as yolo
+import yolo_integration as yolo
 
 
 # True if yolo should provide points for SAM2 or False if you want to select yourself 
