@@ -10,7 +10,7 @@ import yolo_integration as yolo
 
 
 # True if yolo should provide points for SAM2 or False if you want to select yourself 
-auto_labeling = True
+auto_labeling = False
 
 
 

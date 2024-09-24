@@ -26,9 +26,10 @@ def yolo_precheck(img_path, num_of_points):
     # Process results list
     for result in results:
         masks = result.masks  # Masks object for segmentation masks outputs
-        conf = result.boxes.conf.cpu().numpy()[0]
-        
-
+        #conf = result.boxes.conf.cpu().numpy()
+        print("Results:")
+        print(result)
+        print("Result Finished")
 
         if masks and masks.xy:
             polygon_coords = masks.xy[0]  # Get the first mask's coordinates
@@ -50,7 +51,7 @@ def yolo_precheck(img_path, num_of_points):
     return pos_points, neg_points, conf
 
 
-img_path = r"C:\Code Python\automation-with-sam2\labeling_project\masks\F4JA5_26020102.MPG\07715.jpg"
+img_path = r"C:\Code Python\automation-with-sam2\labeling_project\masks\F411U63385060B.MPG\masks\06580.png"
 
 _, _, conf = yolo_precheck(img_path, 1)
 

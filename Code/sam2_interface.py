@@ -48,6 +48,19 @@ class ImageDisplayApp(tk.Tk):
         input_frame = tk.Frame(self)
         input_frame.pack(side='top', fill='x', padx=10, pady=5)
 
+
+        # Add Previous and Next buttons to navigate images
+        self.prev_button = ttk.Button(input_frame, text="<", command=self.prev_images)
+        self.prev_button.pack(side='left', padx=(5, 0))
+
+        self.next_button = ttk.Button(input_frame, text=">", command=self.next_images)
+        self.next_button.pack(side='left', padx=(5, 0))
+
+        # Short slider (10% of the window width)
+        self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient='horizontal', command=self.slider_update)
+        self.image_slider.pack(side='left', fill='x', expand=False, padx=(10, 5), ipadx=12)  # Adjust width with ipadx
+
+        
         # Label
         tk.Label(input_frame, text="Grid Size:").pack(side='left', padx=(0, 5))
 
@@ -72,13 +85,6 @@ class ImageDisplayApp(tk.Tk):
         self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=self.load_more_images_forward)
         self.more_images_forward.pack(side='left', padx=(5, 0))
 
-        # Slider Frame
-        self.slider_frame = tk.Frame(self)
-        self.slider_frame.pack(side='bottom', fill='x', padx=10, pady=5)
-
-        # Initialize slider
-        self.image_slider = ttk.Scale(self.slider_frame, from_=0, to=0, orient='horizontal', command=self.display_images)
-        self.image_slider.pack(fill='x')
 
         self.points = []
         self.labels = []
@@ -87,6 +93,7 @@ class ImageDisplayApp(tk.Tk):
         self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
+        self.current_index = 0
         self.select_directory()
         self.video_path = video_path
         self.frame_rate = frame_rate
@@ -301,7 +308,7 @@ class ImageDisplayApp(tk.Tk):
     def display_images(self, *args):
         """Displays images in a grid format on the canvas."""
         if not self.initialized:
-            return  # Do nothing if not initialized
+            return
 
         self.canvas.delete("all")
 
@@ -309,28 +316,24 @@ class ImageDisplayApp(tk.Tk):
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
 
-        # Ensure the canvas dimensions are valid
         if canvas_width <= 0 or canvas_height <= 0:
             return
 
-        # Get the grid size from the entry field
         try:
             grid_size = int(self.grid_entry.get())
         except ValueError:
             print("Invalid input. Please enter a valid integer.")
             return
 
-        # Prevent invalid sizes
         if grid_size <= 0:
             return
 
-        # Calculate cell size based on canvas size and grid size
         cell_width = canvas_width / grid_size
         cell_height = canvas_height / grid_size
 
-        start_index = int(self.image_slider.get())
+        start_index = self.current_index
 
-        self.image_ids = []  
+        self.image_ids = []
         self.tk_images = []
 
         for i in range(grid_size * grid_size):
@@ -343,32 +346,22 @@ class ImageDisplayApp(tk.Tk):
             img_width = int(cell_width)
             img_height = int(cell_height)
 
-            # Extract the base filename without extension
             base_filename = os.path.splitext(os.path.basename(img_path))[0]
-
-            # Construct the path for the mask file using the base filename
             mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
 
             if os.path.isfile(mask_file):
-                mask = Image.open(mask_file).convert("1")  # Load mask as grayscale
-
-                # Create a red overlay with the same dimensions as the image
-                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 100))  # Red color with 40% transparency
-
-                # Convert the mask to binary and apply it
-                mask_binary = mask.point(lambda p: p > 128 and 255)  # Binarize mask (white areas are 255)
+                mask = Image.open(mask_file).convert("1")
+                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 100))
+                mask_binary = mask.point(lambda p: p > 128 and 255)
                 red_overlay = Image.composite(red_overlay, Image.new("RGBA", img.size, (0, 0, 0, 0)), mask_binary)
 
                 if img.mode != 'RGBA':
                     img = img.convert('RGBA')
 
-                # Apply the overlay to the image
                 img = Image.alpha_composite(img, red_overlay)
-
                 img = img.convert("RGB")
 
             img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
-
             tk_img = ImageTk.PhotoImage(img)
             self.tk_images.append(tk_img)
 
@@ -377,44 +370,50 @@ class ImageDisplayApp(tk.Tk):
             x_position = col * cell_width
             y_position = row * cell_height
             image_id = self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
-            self.image_ids.append(image_id)  # Save the image ID
-
-
+            self.image_ids.append(image_id)
 
     def update_grid(self):
-        """Update the grid size and slider based on the input field value."""
+        """Update the grid size and refresh the displayed images."""
         try:
             if not self.initialized:
-                return  # Do nothing if not initialized
+                return
 
-            # Get the grid size from the entry field
             grid_size = int(self.grid_entry.get())
 
             if grid_size < 1:
                 raise ValueError("Grid size must be greater than 0.")
 
+            print(f"Grid updated: Size = {grid_size}")
 
-            print("Grid updated: Size = {}".format(grid_size))
-
-            # Re-display images with the updated grid
-            self.display_images()
-
-            # Update the slider's maximum value
-            num_images = len(self.images)
+            # Update the slider range based on the number of images and grid size
             images_per_grid = grid_size * grid_size
-            if images_per_grid > 0:
-                self.image_slider.config(to=num_images - images_per_grid)
-            else:
-                self.image_slider.config(to=0)
+            slider_max = max(0, len(self.images) - images_per_grid)
+            self.image_slider.config(from_=0, to=slider_max)
 
-            # Reset the slider value to 0
-            self.image_slider.set(0)
-
-            # Update the displayed images based on the slider value
             self.display_images()
 
         except ValueError as e:
             print(f"Error updating grid: {e}")
+
+    def slider_update(self, value):
+        """Update image display when the slider is moved."""
+        self.current_index = int(float(value))
+        self.display_images()
+
+    def prev_images(self):
+        """Go to the previous set of images."""
+        grid_size = int(self.grid_entry.get())
+        self.current_index = max(0, self.current_index - grid_size)
+        self.display_images()
+        self.image_slider.set(self.current_index)  # Update slider
+
+    def next_images(self):
+        """Go to the next set of images."""
+        grid_size = int(self.grid_entry.get())
+        images_per_grid = grid_size * grid_size
+        self.current_index = min(len(self.images) - images_per_grid, self.current_index + grid_size)
+        self.display_images()
+        self.image_slider.set(self.current_index)  # Update slider
 
     def on_canvas_click(self, event):
         """Handle mouse click events on the canvas."""
@@ -641,7 +640,8 @@ class ImageDisplayApp(tk.Tk):
         self.initialized = True
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
         self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
-
+        
+        self.state('zoomed')    
         self.update_idletasks()
         self.update()
         self.update_grid()

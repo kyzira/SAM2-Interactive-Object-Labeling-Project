@@ -47,7 +47,7 @@ def yolo_precheck(img_path, num_of_points):
 
     try:
         # Get YOLO model results for the image
-        results = model(img_path)  # Assume this returns a list of Result objects
+        results = model(img_path) 
     except Exception as e:
         print(f"Error in YOLO model prediction: {e}")
         return pos_points, neg_points, highest_conf
@@ -70,6 +70,10 @@ def yolo_precheck(img_path, num_of_points):
                     # Convert polygon coordinates to integer and create Polygon
                     integer_coords = [[int(round(x)), int(round(y))] for x, y in polygon_coords]
                     best_polygon = Polygon(integer_coords)  # Save the polygon for later
+            elif not masks:
+                while len(neg_points) < (num_of_points * 2):
+                    random_point = Point(random.uniform(0, width), random.uniform(0, height))
+                    neg_points.append((int(round(random_point.x)), int(round(random_point.y))))
 
         except Exception as e:
             print(f"Error processing result: {e}")
@@ -89,6 +93,8 @@ def yolo_precheck(img_path, num_of_points):
             random_point = Point(random.uniform(0, width), random.uniform(0, height))
             if not best_polygon.contains(random_point):
                 neg_points.append((int(round(random_point.x)), int(round(random_point.y))))
+
+
 
     print(f"Generated {len(pos_points)} positive and {len(neg_points)} negative points.")
     return pos_points, neg_points, highest_conf
