@@ -1,6 +1,6 @@
 import pandas as pd
 import os
-
+from collections import Counter
 
 def aus_allen_zu_reduzierter_liste():
     # Load the list of values from the reference CSV file (stored in column 1)
@@ -66,4 +66,119 @@ def aus_reduzierter_liste_zu_gleichmaeßiger_liste():
     balanced_df.to_csv(output_file, index=False, sep=';')
 
 
-aus_reduzierter_liste_zu_gleichmaeßiger_liste()
+def check_auf_gleiches_video():
+
+    input_file = r"C:\Code Python\automation-with-sam2\alle_schaeden_ueber_900_liste.csv"  # Replace with the path to your input CSV file
+    output_file = r"C:\Code Python\automation-with-sam2\alle_schaeden_sortierte_liste.csv"  # The output file to save the balanced data
+
+    # CSV-Datei laden (ersetze 'deine_datei.csv' mit deinem tatsächlichen Dateinamen)
+    df = pd.read_csv(input_file, delimiter=',', on_bad_lines='skip')
+
+    # Spalte 'Videozeitpunkt' in ein zeitliches Format umwandeln
+    df['Videozeitpunkt'] = pd.to_datetime(df['Videozeitpunkt (h:min:sec)'], format='%H:%M:%S')
+
+    # Sortieren nach 'Videopfad' und 'Videozeitpunkt'
+    df_sorted = df.sort_values(by=['Videopfad', 'Videozeitpunkt'])
+
+    # Ergebnis in eine neue CSV-Datei speichern
+    df_sorted.to_csv(output_file, index=False, sep=';')
+
+
+def filter_meter_difference(input_file, output_file, threshold=0.2):
+    # CSV-Datei laden (ersetze 'deine_datei.csv' mit deinem tatsächlichen Dateinamen)
+    df = pd.read_csv(input_file, delimiter=',', on_bad_lines='skip')
+
+    # Spalte 'Videozeitpunkt' in ein zeitliches Format umwandeln
+    df['Videozeitpunkt'] = pd.to_datetime(df['Videozeitpunkt (h:min:sec)'], format='%H:%M:%S')
+
+    # Sortieren nach 'Videopfad' und 'Meter ab Rohrbeginn'
+    df_sorted = df.sort_values(by=['Videopfad', 'Meter ab Rohrbeginn'])
+
+    # Funktion, um Einträge zu filtern, bei denen der Unterschied im "Meter ab Rohrbeginn" kleiner als threshold ist
+    filtered_entries = []
+    grouped = df_sorted.groupby('Videopfad')
+
+    for _, group in grouped:
+        # Sortieren nach 'Meter ab Rohrbeginn'
+        group_sorted = group.sort_values(by='Meter ab Rohrbeginn')
+        for i in range(1, len(group_sorted)):
+            # Berechne den Unterschied zwischen aufeinanderfolgenden Einträgen
+            diff = abs(group_sorted.iloc[i]['Meter ab Rohrbeginn'] - group_sorted.iloc[i-1]['Meter ab Rohrbeginn'])
+            if diff < threshold:
+                filtered_entries.append(group_sorted.iloc[i-1])
+                filtered_entries.append(group_sorted.iloc[i])
+    
+    # Filtered entries DataFrame erstellen und speichern
+    df_filtered = pd.DataFrame(filtered_entries).drop_duplicates()
+    df_filtered.to_csv(output_file, index=False, sep=';')
+
+    print(f"Gefilterte Einträge wurden in {output_file} gespeichert.")
+
+
+
+
+
+
+def count_schaden_pairs(input_file, output_file):
+    # CSV-Datei laden
+    df = pd.read_csv(input_file, delimiter=',', on_bad_lines='skip')
+
+    # Sortiere nach 'Videopfad' und 'Meter ab Rohrbeginn'
+    df_sorted = df.sort_values(by=['Videopfad', 'Meter ab Rohrbeginn'])
+
+    # Liste für Paare
+    pairs = []
+
+    # Gruppiere die Daten nach 'Videopfad'
+    grouped = df_sorted.groupby('Videopfad')
+
+    for _, group in grouped:
+        # Sortiere nach 'Meter ab Rohrbeginn'
+        group_sorted = group.sort_values(by='Meter ab Rohrbeginn')
+        
+        # Iteriere durch die Gruppe und finde aufeinanderfolgende Einträge
+        for i in range(1, len(group_sorted)):
+            # Nimm nur die ersten 3 Buchstaben der Schadenskürzel
+            schaden_1 = group_sorted.iloc[i-1]['Schadenskürzel'][:3]
+            schaden_2 = group_sorted.iloc[i]['Schadenskürzel'][:3]
+            
+            # Erstelle ein Tuple mit den Kürzeln, sortiert damit (A, B) und (B, A) gleich sind
+            pair = tuple(sorted([schaden_1, schaden_2]))
+            pairs.append(pair)
+
+    # Zähle die Häufigkeit der Paare
+    pair_counts = Counter(pairs)
+
+    # Konvertiere die Paare und ihre Zählungen in ein DataFrame
+    pair_df = pd.DataFrame(pair_counts.items(), columns=['Schaden Paar', 'Anzahl'])
+
+    # Speichere das DataFrame in eine CSV-Datei
+    pair_df.to_csv(output_file, index=False, sep=';')
+
+    print(f"Die Paar-Häufigkeiten wurden in {output_file} gespeichert.")
+
+
+
+# Funktion zum Erstellen einer Liste mit max. 20 Einträgen pro Schadenskürzel
+def get_limited_damage_entries(df, num_entries=20):
+    result = pd.DataFrame()
+    
+    # Gruppieren nach Schadenskürzel
+    groups = df.groupby('Schadenskürzel')
+    
+    # Für jede Gruppe die ersten num_entries Zeilen nehmen
+    for name, group in groups:
+        subset = group.head(num_entries)
+        result = pd.concat([result, subset], axis=0)
+    
+    return result
+
+
+# Datei laden
+df = pd.read_csv(r"C:\Code Python\automation-with-sam2\labeling_project\alle_schaeden_gleichmaessige_liste.csv", sep=';')
+
+# Die Liste mit max. 20 Einträgen pro Schadenskürzel erstellen
+limited_entries = get_limited_damage_entries(df)
+
+# Liste speichern oder weiterverarbeiten
+limited_entries.to_csv(r'C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv', index=False)

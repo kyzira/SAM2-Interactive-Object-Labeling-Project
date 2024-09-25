@@ -73,15 +73,16 @@ class ImageDisplayApp(tk.Tk):
         self.button = ttk.Button(input_frame, text="Update Grid", command=self.update_grid)
         self.button.pack(side='left', padx=(5, 0))
 
-        # Button to select directory
-        self.select_dir_button = ttk.Button(input_frame, text="Select Directory", command=self.select_directory)
-        self.select_dir_button.pack(side='left', padx=(5, 0))
+        # # Button to select directory
+        # self.select_dir_button = ttk.Button(input_frame, text="Select Directory", command=self.select_directory)
+        # self.select_dir_button.pack(side='left', padx=(5, 0))
 
-        # Button to select directory
+        # Button to extract more images
         self.more_images_back = ttk.Button(input_frame, text="extract previous images", command=self.load_more_images_back)
         self.more_images_back.pack(side='left', padx=(5, 0))
 
-        # Button to select directory
+        # Button to extract more images
+        
         self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=self.load_more_images_forward)
         self.more_images_forward.pack(side='left', padx=(5, 0))
 

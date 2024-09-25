@@ -22,7 +22,9 @@ os.makedirs(masks_dir, exist_ok=True)
 os.makedirs(labels_dir, exist_ok=True)
 
 index_path = os.path.join(output_dir, "current_index.txt")
-table_path = os.path.join(output_dir, "alle_schaeden_gleichmaessige_liste.csv")
+# table_path = os.path.join(output_dir, "alle_schaeden_gleichmaessige_liste.csv")
+table_path = r"C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv"
+
 
 
 usecols = ["Videoname", "Videozeitpunkt (h:min:sec)", "Schadenskürzel", "Videopfad", "Schadensbeschreibung"]
