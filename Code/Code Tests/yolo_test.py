@@ -51,7 +51,7 @@ def yolo_precheck(img_path, num_of_points):
     return pos_points, neg_points, conf
 
 
-img_path = r"C:\Code Python\automation-with-sam2\labeling_project\masks\F411U63385060B.MPG\masks\06580.png"
+img_path = r"C:\Code Python\automation-with-sam2\labeling_project\masks\F416Q33076060A.MPG\15450.jpg"
 
 _, _, conf = yolo_precheck(img_path, 1)
 

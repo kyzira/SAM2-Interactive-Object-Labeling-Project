@@ -28,7 +28,7 @@ table_path = r"C:\Code Python\automation-with-sam2\labeling_project\avg polygons
 
 
 usecols = ["Videoname", "Videozeitpunkt (h:min:sec)", "Schadenskürzel", "Videopfad", "Schadensbeschreibung"]
-damage_table = pd.read_csv(table_path, usecols=usecols, delimiter=";")
+damage_table = pd.read_csv(table_path, usecols=usecols, delimiter=",")
 
 if os.path.exists(index_path):
     with open(index_path, "r") as index_file:
@@ -62,18 +62,20 @@ while current_index <= total_length:
     damage_time_split = damage_time.split(":")
     damage_second = int(damage_time_split[0]) *60*60 + int(damage_time_split[1])*60 + int(damage_time_split[2])
 
-    frame_rate = 15
+    frame_rate = 25
 
 
     # Convert video into frames
     conv.convert_video(input_path=input_path, output_path=current_frame_dir, damage_second=damage_second, frame_rate = frame_rate)
-
+    
+    schadens_kurzel  = str(damage_table.iloc[current_index]["Schadenskürzel"])
 
     if auto_labeling:
-        state = yolo.main(frame_dir=current_frame_dir)
+        state = yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
     else:
         # Segment yourself:
-        app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title= damage_table.iloc[current_index]["Schadensbeschreibung"])
+        window_title = (schadens_kurzel) + " " + str(damage_table.iloc[current_index]["Schadensbeschreibung"]))
+        app = sam2.ImageDisplayApp(frame_dir = current_frame_dir, video_path = input_path, frame_rate = frame_rate, window_title = window_title)
         app.run()
         state = True
 
@@ -107,6 +109,10 @@ while current_index <= total_length:
                 mask_list.append(file_name)
 
         mask_list.sort()
+
+        if not mask_list:
+            current_index += 1
+            continue
 
         start_frame = mask_list[0]
         start_frame = start_frame.split(".")[0]

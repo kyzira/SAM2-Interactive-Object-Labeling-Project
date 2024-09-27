@@ -7,7 +7,8 @@ from PIL import Image
 import torch
 import os
 import numpy as np
-
+from skimage import measure
+from scipy.spatial import procrustes
 
 ### LOADING MODELS ###
 
@@ -30,7 +31,7 @@ predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 ### REST ###
 
-def yolo_precheck(img_path, num_of_points):
+def yolo_precheck(img_path, num_of_points, schadens_kurzel):
     pos_points = []
     neg_points = []
     highest_conf = 0
@@ -78,6 +79,9 @@ def yolo_precheck(img_path, num_of_points):
         except Exception as e:
             print(f"Error processing result: {e}")
 
+
+    best_polygon = compare_with_sam(best_polygon, img_path, schadens_kurzel)        
+
     # If a valid polygon was found, generate points
     if best_polygon is not None:
         min_x, min_y, max_x, max_y = best_polygon.bounds
@@ -99,6 +103,93 @@ def yolo_precheck(img_path, num_of_points):
     print(f"Generated {len(pos_points)} positive and {len(neg_points)} negative points.")
     return pos_points, neg_points, highest_conf
 
+
+def load_mean_shape_from_file(filepath):
+    """
+    Load the mean shape from a text file and return it as a numpy array.
+    """
+    mean_shape = []
+    with open(filepath, 'r') as file:
+        for line in file:
+            x, y = map(float, line.strip().split(','))
+            mean_shape.append((x, y))
+    
+    return np.array(mean_shape)
+
+
+def compare_with_procrustes(polygon1, polygon2):
+    """
+    Compare two polygons using Procrustes analysis.
+    Args:
+        polygon1 (np.array): First polygon.
+        polygon2 (np.array): Second polygon.
+    
+    Returns:
+        float: Disparity score (lower is better).
+    """
+    _, _, disparity = procrustes(polygon1, polygon2)
+    return disparity
+
+
+
+def compare_with_sam(yolo_polygon, img_path, schadens_kurzel, threshold=0.02):
+    """
+    Compare YOLO polygon with SAM polygon from a mask, and if they differ, compare each to the mean shape.
+    
+    Args:
+        yolo_polygon (list): Polygon from YOLO model (list of (x, y) points).
+        img_path (str): Path to the image.
+        mean_shape_path (str): Path to the text file containing the mean shape.
+        threshold (float): Threshold for comparing YOLO and SAM polygons.
+    
+    Returns:
+        list: Selected polygon (YOLO or SAM) based on comparison with the mean shape.
+    """
+    # Load the mean shape from file
+
+    # Get directory and mask path
+    img_dir = os.path.split(img_path)[0]
+    mask_name = os.path.basename(img_path).replace(".jpg", ".png")
+    mask_path = os.path.join(img_dir, "masks", mask_name)
+
+    # If mask doesn't exist, return YOLO polygon
+    if not os.path.exists(mask_path):
+        return yolo_polygon
+
+    # Load the SAM mask and find contours (polygons)
+    mask = np.array(Image.open(mask_path).convert('1'))  # Convert to binary
+    contours = measure.find_contours(mask, 0.5)
+
+    if not contours:
+        return yolo_polygon  # No contour found in SAM, fallback to YOLO polygon
+
+    # Use the first contour as SAM's polygon (or apply any selection logic if multiple)
+    sam_contour = np.flip(contours[0], axis=1)
+
+    # Compare YOLO polygon with SAM polygon using Procrustes analysis
+    yolo_polygon_np = np.array(yolo_polygon)
+    sam_polygon_np = np.array(sam_contour)
+
+    disparity_yolo_sam = compare_with_procrustes(yolo_polygon_np, sam_polygon_np)
+    
+    # If YOLO and SAM are similar enough, select YOLO polygon
+    if disparity_yolo_sam <= threshold:
+        return yolo_polygon
+    
+    temp_dir = os.path.dirname(os.path.dirname(img_dir))
+    mean_shape_path = os.join.path(temp_dir, "avg polygons", f"{schadens_kurzel}_mean_shape.txt")
+
+    mean_shape = load_mean_shape_from_file(mean_shape_path)
+    
+    # If YOLO and SAM differ, compare each with the mean shape
+    disparity_yolo_mean = compare_with_procrustes(yolo_polygon_np, mean_shape)
+    disparity_sam_mean = compare_with_procrustes(sam_polygon_np, mean_shape)
+    
+    # Return the polygon closer to the mean shape
+    if disparity_yolo_mean < disparity_sam_mean:
+        return yolo_polygon
+    else:
+        return sam_polygon_np.tolist()
 
 def show_propagated_images(mask_dir, inference_state, file_names):
     video_segments = {}
@@ -155,7 +246,7 @@ def find_frame_index(frame, frame_dir):
     return None  # Return None if no match
 
 
-def main(frame_dir=None):
+def main(frame_dir=None, schadens_kurzel=None):
     if frame_dir is None:
         frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\aaa_short"
 
