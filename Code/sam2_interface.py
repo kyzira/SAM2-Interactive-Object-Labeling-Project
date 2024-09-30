@@ -13,6 +13,8 @@ from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
+import json
+from skimage import measure
 
 
 # Initialize the predictor as needed
@@ -29,7 +31,7 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 class ImageDisplayApp(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field"):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None):
         super().__init__()
         self.title(window_title)
         self.geometry("1200x1000")
@@ -38,7 +40,30 @@ class ImageDisplayApp(tk.Tk):
         self.initialized = False
 
         # Initialize object ID
-        self.ann_obj_id = 1
+        self.ann_obj_id = 0
+
+        self.options = [schadens_kurzel]
+
+        # Radiobutton variable to store the selected option
+        self.radio_var = tk.StringVar()
+        
+        # Frame for Radiobuttons and input field
+        radio_frame = tk.Frame(self)
+        radio_frame.pack(side='top', fill='x', padx=10, pady=5)
+
+        # Add widgets in the radio_frame horizontally
+        tk.Label(radio_frame, text="Add option:").pack(side='left', padx=(0, 5))
+        self.new_option_entry = tk.Entry(radio_frame, width=15)
+        self.new_option_entry.pack(side='left', padx=(0, 5))
+
+        # Add button
+        add_button = ttk.Button(radio_frame, text="Add", command=self.add_option)
+        add_button.pack(side='left', padx=(5, 0))
+
+
+        # Radiobuttons container
+        self.radio_container = tk.Frame(radio_frame)
+        self.radio_container.pack(side='left', padx=10, pady=5)
 
         # Initialize canvas
         self.canvas = tk.Canvas(self, width=1000, height=800, bg='white')
@@ -73,16 +98,11 @@ class ImageDisplayApp(tk.Tk):
         self.button = ttk.Button(input_frame, text="Update Grid", command=self.update_grid)
         self.button.pack(side='left', padx=(5, 0))
 
-        # # Button to select directory
-        # self.select_dir_button = ttk.Button(input_frame, text="Select Directory", command=self.select_directory)
-        # self.select_dir_button.pack(side='left', padx=(5, 0))
-
         # Button to extract more images
         self.more_images_back = ttk.Button(input_frame, text="extract previous images", command=self.load_more_images_back)
         self.more_images_back.pack(side='left', padx=(5, 0))
 
         # Button to extract more images
-        
         self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=self.load_more_images_forward)
         self.more_images_forward.pack(side='left', padx=(5, 0))
 
@@ -91,6 +111,7 @@ class ImageDisplayApp(tk.Tk):
         self.labels = []
         self.inference_state = None
         self.frame_dir = frame_dir
+        self.working_dir = os.path.dirname(frame_dir)
         self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
@@ -98,8 +119,54 @@ class ImageDisplayApp(tk.Tk):
         self.select_directory()
         self.video_path = video_path
         self.frame_rate = frame_rate
+        self.all_points_data = {}
+        self.update_radiobuttons()
+
+        self.frame_index = []
+        for file in os.listdir(self.frame_dir):
+            if file.endswith(".jpg"):
+                self.frame_index.append(file)
+        
+
+        
 
 
+    def update_radiobuttons(self):
+        for widget in self.radio_container.winfo_children():
+            widget.destroy()
+
+        # Create the Radiobuttons in a horizontal layout
+        for option in self.options:
+            rb = tk.Radiobutton(self.radio_container, text=option, variable=self.radio_var, value=option)
+            rb.pack(side='left', padx=5)  # Use side='left' to arrange them horizontally
+
+            current_damage_dir = os.path.join(self.working_dir, str(option))
+            os.makedirs(current_damage_dir, exist_ok=True)
+
+
+        # Set the default selection to the first option
+        if self.options:
+            self.radio_var.set(self.options[0])
+
+
+    def add_option(self):
+        """Add a new option to the radiobutton list."""
+        new_option = self.new_option_entry.get().strip()
+        if new_option:
+            if new_option not in self.options:
+                self.options.append(new_option)
+                self.update_radiobuttons()
+                self.new_option_entry.delete(0, tk.END)
+
+
+    def get_selected_option_index(self):
+        selected_option = self.radio_var.get()
+
+        if selected_option in self.options:
+            self.ann_obj_id = self.options.index(selected_option)
+        else:
+            self.ann_obj_id = 0
+    
 
     def detect_framerate(self):
         num1 = None
@@ -348,6 +415,7 @@ class ImageDisplayApp(tk.Tk):
             img_height = int(cell_height)
 
             base_filename = os.path.splitext(os.path.basename(img_path))[0]
+
             mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
 
             if os.path.isfile(mask_file):
@@ -372,6 +440,7 @@ class ImageDisplayApp(tk.Tk):
             y_position = row * cell_height
             image_id = self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
             self.image_ids.append(image_id)
+
 
     def update_grid(self):
         """Update the grid size and refresh the displayed images."""
@@ -452,25 +521,29 @@ class ImageDisplayApp(tk.Tk):
         self.add_points(selected_image, index)
         
 
-
     def save_points_to_file(self, frame_number):
-        """Save points and labels to a .txt file."""
-        # Get the image path for the current frame
-        if frame_number >= len(self.image_paths):
+        """Save points and labels to a single JSON file sorted by frame and then by label."""
+        # Check if the frame number is within the valid range
+        if frame_number < 0 or frame_number >= len(self.image_paths):
             print("Frame number out of range")
             return
 
-        img_path = self.image_paths[frame_number]
-        base_filename = os.path.splitext(os.path.basename(img_path))[0]
+        # Ensure that the dictionary has an entry for the current frame using the frame number as the key
+        if frame_number not in self.all_points_data:
+            self.all_points_data[frame_number] = {0: [], 1: []}  # Initialized with empty lists for labels
 
-        # Construct the filename for saving points
-        points_file = os.path.join(self.mask_dir, f'{base_filename}.txt')
+        # Collect points and labels for the current frame
+        for point, label in zip(self.points, self.labels):
+            if label in self.all_points_data[frame_number]:  # Using frame_number as the key directly
+                self.all_points_data[frame_number][label].append({"x": int(point[0]), "y": int(point[1])})
 
-        with open(points_file, 'w') as file:
-            for point, label in zip(self.points, self.labels):
-                file.write(f"{point[0]}, {point[1]}, {label}\n")
+        # Construct the filename for saving all points data
+        points_json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], 'set_points.json')
 
-        print(f"Points saved to {points_file}")
+        # Save the all_points_data dictionary to a JSON file
+        with open(points_json_file, 'w') as file:
+            json.dump(self.all_points_data, file, indent=4)  # Save with pretty printing
+
 
 
 
@@ -479,13 +552,14 @@ class ImageDisplayApp(tk.Tk):
         """Function to handle adding points to an image and updating the mask."""
         self.points = []
         self.labels = []
+        self.get_selected_option_index()
 
         # Convert the PIL image to a NumPy array
         image_np = np.array(image)
 
         # Create a new top-level window for annotation
         annotation_window = tk.Toplevel(self)
-        annotation_window.title("Add Points to Image")
+        annotation_window.title(f"Punkte für {self.options[self.ann_obj_id]} hinzufügen")
 
         # Define event handlers
         def on_click(event):
@@ -609,25 +683,58 @@ class ImageDisplayApp(tk.Tk):
                     video_segments[out_frame_idx][out_obj_id] = np.maximum(video_segments[out_frame_idx][out_obj_id], (out_mask_logits[i] > 0.0).cpu().numpy())
 
 
+        def is_collinear(p1, p2, p3):
+            """ Check if three points are collinear """
+            return (p2[1] - p1[1]) * (p3[0] - p2[0]) == (p2[0] - p1[0]) * (p3[1] - p2[1])
+        
+        frame_number = self.frame_index
+
+        # Dictionary to hold all frame data
+        all_frame_data = {}
+
         for out_frame_idx, masks in video_segments.items():
+            # Create a list to hold all mask data for the current frame
+            mask_data = []
             for out_obj_id, out_mask in masks.items():
                 # Remove singleton dimensions
                 out_mask = np.squeeze(out_mask)  # Squeeze to remove dimensions of size 1
 
-                # Convert the mask to a PIL image
-                if out_mask.ndim == 2:  # If the mask is 2D, proceed
-                    out_mask_img = Image.fromarray((out_mask * 255).astype('uint8'))
+                # Extract the contours of the mask
+                contours = measure.find_contours(out_mask, 0.5)  # Adjust the level as necessary
 
-                    # Construct the filename for saving the mask
-                    # Use the base filename for the mask based on the frame number
-                    img_path = self.image_paths[out_frame_idx]
-                    base_filename = os.path.splitext(os.path.basename(img_path))[0]
-                    mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
+                # If contours were found, process them
+                if contours:
+                    for contour in contours:
+                        contour = np.flip(contour, axis=1)
 
-                    # Save the mask image with the constructed filename
-                    out_mask_img.save(mask_file)
-                else:
-                    print(f"Unexpected mask shape: {out_mask.shape}")
+                        # Convert coordinates to integers
+                        contour = [(int(x), int(y)) for x, y in contour]
+
+                        # Filter to keep only start and end points of straight lines
+                        filtered_contour = []
+                        if len(contour) > 1:
+                            filtered_contour.append(contour[0])  # Always add the first point
+                            for i in range(1, len(contour) - 1):
+                                if not is_collinear(contour[i-1], contour[i], contour[i+1]):
+                                    filtered_contour.append(contour[i])  # Add the point if not collinear
+                            filtered_contour.append(contour[-1])  # Always add the last point
+                        
+                        # Append filtered coordinates to mask_data
+                        mask_data.append(filtered_contour)
+
+            # Add mask data to all_frame_data with the frame number as the key
+            all_frame_data[frame_number[out_frame_idx]] = mask_data
+
+        # Sort the all_frame_data dictionary according to the order in frame_number
+        sorted_frame_data = {frame_number[i]: all_frame_data[frame_number[i]] for i in range(len(frame_number)) if frame_number[i] in all_frame_data}
+
+        # Construct the filename for saving the mask data as a single JSON file
+        json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], "masks.json")
+
+        # Save the sorted all_frame_data dictionary to a JSON file
+        with open(json_file, 'w') as f:
+            json.dump(sorted_frame_data, f, indent=4)  # Save with pretty printing
+            
 
         self.update_grid()
 
@@ -653,6 +760,6 @@ class ImageDisplayApp(tk.Tk):
 
 
 if __name__ == "__main__":
-    app = ImageDisplayApp(frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1")
+    app = ImageDisplayApp(frame_dir = r"C:\Users\K3000\Videos\SAM2 Tests\KI_1", schadens_kurzel = "BBA")
     app.run()
 
