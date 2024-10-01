@@ -30,32 +30,29 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
     # Get total number of frames in the video
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Total frames in video: {total_frames}")
+    
 
     if damage_second and not (start_frame and end_frame):
         fps = cap.get(cv2.CAP_PROP_FPS)
         damage_frame = damage_second * fps
-        start_frame = int(damage_frame - rewind_seconds * fps)
-        end_frame = int(damage_frame - proceed_seconds * fps)
+        start_frame = max(0, int(damage_frame - rewind_seconds * fps))
+        end_frame = min(total_frames, int(damage_frame - proceed_seconds * fps))
+        print(f"Damage Second: {damage_second} Damage Frame: {damage_frame}")
 
-        if start_frame < 0:
-            start_frame = 0
-        if end_frame > total_frames:
-            end_frame = total_frames
 
     elif not (start_frame and end_frame):
         start_frame = 0
         end_frame = total_frames
 
 
-    if end_frame > total_frames:
-        end_frame = total_frames
+    end_frame = min(total_frames, end_frame)
 
 
     print(f"Extracting frames from {start_frame} to {end_frame} with a frame rate of {frame_rate}.")
 
     frame_number = start_frame
 
-    while frame_number < end_frame:
+    for frame_number in range(start_frame, end_frame, frame_rate):
         # Set the position of the next frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
         ret, frame = cap.read()
@@ -68,9 +65,6 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
         cv2.imwrite(output_filename, frame)
 
         print(f"Saved frame {frame_number} to {output_filename}")
-
-        # Move to the next frame
-        frame_number += frame_rate
 
     cap.release()
     print(f"Frames have been saved to {frame_dir}.")

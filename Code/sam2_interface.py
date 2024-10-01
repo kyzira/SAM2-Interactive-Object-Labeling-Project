@@ -9,7 +9,7 @@ import torch
 import os
 import numpy as np
 import cv2
-from sam2.build_sam import build_sam2_video_predictor
+from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
@@ -18,11 +18,11 @@ from skimage import measure
 
 
 # Initialize the predictor as needed
-# sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
-# model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
 
-sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+# sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
+# model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
 torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
@@ -62,10 +62,13 @@ class ImageDisplayApp(tk.Tk):
         add_button = ttk.Button(radio_frame, text="Add", command=self.add_option)
         add_button.pack(side='left', padx=(5, 0))
 
-
         # Radiobuttons container
         self.radio_container = tk.Frame(radio_frame)
         self.radio_container.pack(side='left', padx=10, pady=5)
+
+        self.wait_label = tk.Label(radio_frame, text="", font=("Helvetica", 16), fg="red")
+        self.wait_label.pack(side="left", padx=10, pady=5)
+
 
         # Initialize canvas
         self.canvas = tk.Canvas(self, width=1000, height=800, bg='white')
@@ -114,7 +117,6 @@ class ImageDisplayApp(tk.Tk):
         self.inference_state = None
         self.frame_dir = frame_dir
         self.working_dir = os.path.dirname(frame_dir)
-        self.mask_dir = None
         self.output_dir = None
         self.predictor_initialized = False
         self.current_index = 0
@@ -139,13 +141,16 @@ class ImageDisplayApp(tk.Tk):
             (255, 100, 100),   # Red
             (100, 100, 255),   # Blue
             (100, 255, 100),   # Green
-            (255, 255, 100), # Yellow
-            (255, 100, 255)  # Magenta
+            (255, 255, 100),   # Yellow
+            (255, 100, 255)    # Magenta
         ]
 
         # Clear existing radio buttons
         for widget in self.radio_container.winfo_children():
             widget.destroy()
+
+        # Dictionary to store the variables for checkboxes
+        self.checkbox_vars = {}
 
         # Create the Radiobuttons in a horizontal layout
         for index, option in enumerate(self.options):
@@ -153,17 +158,23 @@ class ImageDisplayApp(tk.Tk):
             color = colors[index % len(colors)]
             color_hex = "#{:02x}{:02x}{:02x}".format(*color)  # Convert RGB to hex
 
-            # Create a frame for each radio button and underline
+            # Create a frame for each radio button and checkbox
             frame = tk.Frame(self.radio_container)
             frame.pack(side='left', padx=5)
 
+            # Create the radio button
             rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg='white')
             rb.pack()
 
-            # Create a colorful underline using a label
-            underline = tk.Label(frame, text=' ', bg=color_hex, height=1, width=5)
-            underline.pack(fill='x')
+            # Create a Checkbutton below each Radiobutton
+            check_var = tk.BooleanVar(value=True)  # Set to True initially (checked)
+            checkbox = tk.Checkbutton(frame, variable=check_var, bg=color_hex, command=self.on_checkbox_toggled)
+            checkbox.pack()
 
+            # Store the check_var in a dictionary with the option as the key
+            self.checkbox_vars[option] = check_var
+
+            # Optionally create directories or perform additional logic
             current_damage_dir = os.path.join(self.working_dir, str(option))
             os.makedirs(current_damage_dir, exist_ok=True)
 
@@ -182,9 +193,17 @@ class ImageDisplayApp(tk.Tk):
                 self.options.append(new_option)
                 self.update_radiobuttons()
                 self.new_option_entry.delete(0, tk.END)
+        else:
+            print()
+
+
+    def on_checkbox_toggled(self):
+        self.display_images()
+
 
 
     def get_selected_option_index(self):
+        # To give each option its corresponding object id
         selected_option = self.radio_var.get()
 
         if selected_option in self.options:
@@ -314,10 +333,6 @@ class ImageDisplayApp(tk.Tk):
         self.update_grid()
 
 
-
-
-
-
     def load_more_images_forward(self):
         if not self.initialized:
             return  # Do nothing if not initialized
@@ -369,8 +384,6 @@ class ImageDisplayApp(tk.Tk):
         self.update_grid()
 
 
-
-
     def select_directory(self):
         """Open a directory dialog and load images from the selected directory."""
         if not self.frame_dir:
@@ -388,9 +401,7 @@ class ImageDisplayApp(tk.Tk):
                     img = Image.open(file_path)
                     self.images.append(img)
             print(f"Loaded {len(self.images)} images from {directory}")
-            self.mask_dir = os.path.join(self.frame_dir, "masks")
-            os.makedirs(self.mask_dir, exist_ok=True)     
-
+ 
             # Initialize predictor state
             if not self.predictor_initialized:
                 self.inference_state = predictor.init_state(video_path=self.frame_dir)
@@ -398,12 +409,15 @@ class ImageDisplayApp(tk.Tk):
             
             self.update_grid()  # Refresh the grid and slider based on new images
 
+
     def display_images(self, *args):
         """Displays images in a grid format on the canvas."""
         if not self.initialized:
             return
 
         self.canvas.delete("all")
+
+        self.load_all_set_points()
 
         # Get canvas size
         canvas_width = self.canvas.winfo_width()
@@ -477,14 +491,16 @@ class ImageDisplayApp(tk.Tk):
                     if base_filename in polygon_data:
                         polygons = polygon_data[base_filename]
 
+                        option_index = self.options.index(folder_name)
+
                         # Set a unique color for this mask.json file (loop through the colors if there are more mask files than colors)
-                        color = colors[self.options.index(folder_name) % len(colors)]
+                        color = colors[option_index % len(colors)]
 
-
-                        # Draw polygons in the assigned color
-                        for polygon in polygons:
-                            polygon_tuples = [tuple(point) for point in polygon]
-                            overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+                        if self.checkbox_vars[self.options[option_index]].get():
+                            # Draw polygons in the assigned color
+                            for polygon in polygons:
+                                polygon_tuples = [tuple(point) for point in polygon]
+                                overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
                 # Composite the overlay with the original image
                 if img.mode != 'RGBA':
@@ -524,7 +540,6 @@ class ImageDisplayApp(tk.Tk):
             images_per_grid = grid_size * grid_size
             slider_max = max(0, len(self.images) - images_per_grid)
             self.image_slider.config(from_=0, to=slider_max)
-
             self.display_images()
 
         except ValueError as e:
@@ -551,6 +566,9 @@ class ImageDisplayApp(tk.Tk):
         self.image_slider.set(self.current_index)  # Update slider
 
     def on_canvas_click(self, event):
+
+        self.wait_label.config(text="Bitte Warten! Bilder werden berechnet")
+
         """Handle mouse click events on the canvas."""
         x, y = event.x, event.y
 
@@ -586,6 +604,45 @@ class ImageDisplayApp(tk.Tk):
         self.add_points(selected_image, index)
         
 
+    def load_all_set_points(self):
+        all_set_points = []
+        # Reset predictor
+        predictor.reset_state(self.inference_state)
+
+        for option_index, option in enumerate(self.options):
+            set_points_path = os.path.join(self.working_dir, option, "set_points.json")
+            if os.path.exists(set_points_path):
+                with open(set_points_path, 'r') as file:
+                    all_set_points = json.load(file)
+                
+                for frame_name in all_set_points:
+                    index = self.frame_index.index(frame_name)
+
+                    point_list = []
+                    label_list = []
+                    
+                    # Access the points and labels for each frame
+                    for label, points in all_set_points[frame_name].items():
+                        for point in points:  
+                            point_list.append([point['x'], point['y']]) 
+                            label_list.append(int(label))
+
+
+                    if point_list and label_list:
+                        # Convert the list of points to a NumPy array
+                        points_array = np.array(point_list, dtype=np.float32)
+                        labels_array = np.array(label_list, dtype=np.int32)
+                        
+                        _, _, _ = predictor.add_new_points_or_box(
+                            inference_state = self.inference_state,
+                            frame_idx = index,
+                            obj_id = option_index,
+                            points = points_array,
+                            labels = labels_array,
+                        )
+
+
+
     def save_points_to_file(self, frame_number):
         """Save points and labels to a single JSON file sorted by frame and then by label."""
         # Check if the frame number is within the valid range
@@ -602,7 +659,7 @@ class ImageDisplayApp(tk.Tk):
 
         frame_index = self.frame_index
         # Ensure that the dictionary has an entry for the current frame using the frame number as the key
-        if frame_number not in self.all_points_data:
+        if frame_index[frame_number] not in self.all_points_data:
             self.all_points_data[frame_index[frame_number]] = {0: [], 1: []}  # Initialized with empty lists for labels
 
 
@@ -705,7 +762,7 @@ class ImageDisplayApp(tk.Tk):
             ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
 
         def on_close():
-            print("closed")
+            self.wait_label.config(text="")
             self.save_points_to_file(frame_number)
             annotation_window.destroy()
             self.show_propagated_images()
@@ -728,9 +785,6 @@ class ImageDisplayApp(tk.Tk):
         fig.canvas.mpl_connect('key_press_event', on_key_press)
 
         annotation_window.protocol("WM_DELETE_WINDOW", on_close)
-
-
-
 
 
     def show_propagated_images(self):
@@ -807,13 +861,8 @@ class ImageDisplayApp(tk.Tk):
         with open(json_file, 'w') as f:
             json.dump(sorted_frame_data, f, indent=4)  # Save with pretty printing
             
-
         self.update_grid()
-
-
-            
-        
-            
+  
 
     def run(self):
         """Start the Tkinter event loop."""
@@ -826,8 +875,6 @@ class ImageDisplayApp(tk.Tk):
         self.update()
         self.update_grid()
         self.mainloop()
-
-
 
 
 
