@@ -4,12 +4,12 @@ This Programm loads images from a directory and lets you iteractively use SAM2 t
 
 import tkinter as tk
 from tkinter import ttk, filedialog
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import torch
 import os
 import numpy as np
 import cv2
-from sam2.build_sam import build_sam2_video_predictor # type: ignore
+from sam2.build_sam import build_sam2_video_predictor
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
@@ -18,10 +18,12 @@ from skimage import measure
 
 
 # Initialize the predictor as needed
-sam2_checkpoint = r"C:\Users\K3000\segment-anything-2\checkpoints\sam2_hiera_large.pt"
-model_cfg = "sam2_hiera_l.yaml"
+# sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
+# model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
 
-# use bfloat16 for the entire notebook
+sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
+model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+
 torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
 
 if torch.cuda.get_device_properties(0).major >= 8:
@@ -132,21 +134,44 @@ class ImageDisplayApp(tk.Tk):
 
 
     def update_radiobuttons(self):
+        # Define the colors for the radio buttons (matching overlay colors)
+        colors = [
+            (255, 100, 100),   # Red
+            (100, 100, 255),   # Blue
+            (100, 255, 100),   # Green
+            (255, 255, 100), # Yellow
+            (255, 100, 255)  # Magenta
+        ]
+
+        # Clear existing radio buttons
         for widget in self.radio_container.winfo_children():
             widget.destroy()
 
         # Create the Radiobuttons in a horizontal layout
-        for option in self.options:
-            rb = tk.Radiobutton(self.radio_container, text=option, variable=self.radio_var, value=option)
-            rb.pack(side='left', padx=5)  # Use side='left' to arrange them horizontally
+        for index, option in enumerate(self.options):
+            # Get the color based on the index and rotate it if there are more options than colors
+            color = colors[index % len(colors)]
+            color_hex = "#{:02x}{:02x}{:02x}".format(*color)  # Convert RGB to hex
+
+            # Create a frame for each radio button and underline
+            frame = tk.Frame(self.radio_container)
+            frame.pack(side='left', padx=5)
+
+            rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg='white')
+            rb.pack()
+
+            # Create a colorful underline using a label
+            underline = tk.Label(frame, text=' ', bg=color_hex, height=1, width=5)
+            underline.pack(fill='x')
 
             current_damage_dir = os.path.join(self.working_dir, str(option))
             os.makedirs(current_damage_dir, exist_ok=True)
 
-
         # Set the default selection to the first option
         if self.options:
             self.radio_var.set(self.options[0])
+
+
 
 
     def add_option(self):
@@ -404,6 +429,28 @@ class ImageDisplayApp(tk.Tk):
         self.image_ids = []
         self.tk_images = []
 
+        # Define a set of colors for different mask.json files
+        colors = [
+            (255, 0, 0, 100),   # Red with transparency
+            (0, 0, 255, 100),   # Blue with transparency
+            (0, 255, 0, 100),   # Green with transparency
+            (255, 255, 0, 100), # Yellow with transparency
+            (255, 0, 255, 100)  # Magenta with transparency
+        ]
+
+        # Find subfolders with masks.json files in the working directory
+        mask_folders = []
+        for folder_name in os.listdir(self.working_dir):
+            folder_path = os.path.join(self.working_dir, folder_name)
+            if os.path.isdir(folder_path):
+                mask_file = os.path.join(folder_path, "masks.json")
+                if os.path.isfile(mask_file):
+                    mask_folders.append((folder_name, mask_file))
+                    if folder_name not in self.options:
+                        self.options.append(folder_name)
+                        self.update_radiobuttons()
+                        
+
         for i in range(grid_size * grid_size):
             img_index = start_index + i
             if img_index >= len(self.images):
@@ -414,32 +461,50 @@ class ImageDisplayApp(tk.Tk):
             img_width = int(cell_width)
             img_height = int(cell_height)
 
-            base_filename = os.path.splitext(os.path.basename(img_path))[0]
 
-            mask_file = os.path.join(self.mask_dir, f"{base_filename}.png")
+            if mask_folders:
+                base_filename = os.path.basename(img_path)
 
-            if os.path.isfile(mask_file):
-                mask = Image.open(mask_file).convert("1")
-                red_overlay = Image.new("RGBA", img.size, (255, 0, 0, 100))
-                mask_binary = mask.point(lambda p: p > 128 and 255)
-                red_overlay = Image.composite(red_overlay, Image.new("RGBA", img.size, (0, 0, 0, 0)), mask_binary)
+                # Create a transparent overlay for polygons
+                overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+                overlay_draw = ImageDraw.Draw(overlay, "RGBA")
 
+                # Load and apply polygons from each masks.json in different colors
+                for (folder_name, mask_file) in mask_folders:
+                    with open(mask_file, 'r') as f:
+                        polygon_data = json.load(f)
+
+                    if base_filename in polygon_data:
+                        polygons = polygon_data[base_filename]
+
+                        # Set a unique color for this mask.json file (loop through the colors if there are more mask files than colors)
+                        color = colors[self.options.index(folder_name) % len(colors)]
+
+
+                        # Draw polygons in the assigned color
+                        for polygon in polygons:
+                            polygon_tuples = [tuple(point) for point in polygon]
+                            overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+
+                # Composite the overlay with the original image
                 if img.mode != 'RGBA':
                     img = img.convert('RGBA')
-
-                img = Image.alpha_composite(img, red_overlay)
+                img = Image.alpha_composite(img, overlay)
                 img = img.convert("RGB")
 
+            # Resize the image
             img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
             tk_img = ImageTk.PhotoImage(img)
             self.tk_images.append(tk_img)
 
+            # Place the image on the canvas
             row = i // grid_size
             col = i % grid_size
             x_position = col * cell_width
             y_position = row * cell_height
             image_id = self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
             self.image_ids.append(image_id)
+
 
 
     def update_grid(self):
@@ -527,18 +592,25 @@ class ImageDisplayApp(tk.Tk):
         if frame_number < 0 or frame_number >= len(self.image_paths):
             print("Frame number out of range")
             return
+        
+        points_json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], 'set_points.json')
 
+        if os.path.exists(points_json_file):
+            with open(points_json_file, 'r') as file:
+                self.all_points_data = json.load(file)
+
+
+        frame_index = self.frame_index
         # Ensure that the dictionary has an entry for the current frame using the frame number as the key
         if frame_number not in self.all_points_data:
-            self.all_points_data[frame_number] = {0: [], 1: []}  # Initialized with empty lists for labels
+            self.all_points_data[frame_index[frame_number]] = {0: [], 1: []}  # Initialized with empty lists for labels
+
 
         # Collect points and labels for the current frame
         for point, label in zip(self.points, self.labels):
-            if label in self.all_points_data[frame_number]:  # Using frame_number as the key directly
-                self.all_points_data[frame_number][label].append({"x": int(point[0]), "y": int(point[1])})
+            if label in self.all_points_data[frame_index[frame_number]]:  # Using frame_number as the key directly
+                self.all_points_data[frame_index[frame_number]][label].append({"x": int(point[0]), "y": int(point[1])})
 
-        # Construct the filename for saving all points data
-        points_json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], 'set_points.json')
 
         # Save the all_points_data dictionary to a JSON file
         with open(points_json_file, 'w') as file:
