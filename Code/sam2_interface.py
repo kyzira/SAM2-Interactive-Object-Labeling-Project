@@ -32,8 +32,79 @@ if torch.cuda.get_device_properties(0).major >= 8:
 
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
+
+
+
+class Koordinaten:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def to_dict(self):
+        return{
+            'x': self.x, 
+            'y': self.y
+        }
+    
+
+class Gesetzte_Punkte:
+    def __init__(self, pos_punkte, neg_punkte):
+        self.pos_punkte = pos_punkte
+        self.neg_punkte = neg_punkte
+
+    def to_dict(self):
+        return {
+            '1': self.pos_punkte,
+            '0': self.neg_punkte
+        }
+
+
+class Damage_info:
+    def __init__(self, maske, punkte_klasse):
+        self.punkte = punkte_klasse 
+        self.maske = maske
+    
+    def to_dict(self):
+        return {
+            'Maske': self.maske,
+            'Punkte': self.punkte.to_dict() 
+        }
+
+
+class Damage:
+    def __init__(self, type_of_damage):
+        self.type_of_damage = type_of_damage
+        self.ids = []  
+
+    def add_info(self, damage_info):
+        self.ids.append(damage_info) 
+
+    def to_dict(self):
+        return {
+            'Kürzel': self.type_of_damage,
+            'Instanz': [damage_info.to_dict() for damage_info in self.ids]  
+        }
+
+
+class Frame:
+    def __init__(self, name):
+        self.name = name 
+        self.damages = [] 
+
+    def add_damage(self, damage):
+        self.damages.append(damage)  
+
+    def to_dict(self):
+        return {
+            'Frame': self.name,
+            'Befunde': [damage.to_dict() for damage in self.damages] 
+        }
+
+
+
+
 class ImageDisplayApp(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None, stop_callback=None):
         super().__init__()
         self.title(window_title)
         self.geometry("1200x1000")
@@ -68,6 +139,19 @@ class ImageDisplayApp(tk.Tk):
 
         self.wait_label = tk.Label(radio_frame, text="", font=("Helvetica", 16), fg="red")
         self.wait_label.pack(side="left", padx=10, pady=5)
+
+
+        # Button to delete labeling
+        self.more_images_forward = ttk.Button(radio_frame, text="delete unselected labels", command=self.destroy)
+        self.more_images_forward.pack(side='left', padx=(5, 5))
+
+        # Button to skip to next label
+        self.more_images_forward = ttk.Button(radio_frame, text="Next", command=self.destroy)
+        self.more_images_forward.pack(side='right', padx=(5, 5))
+
+        # Button to stop labeling
+        self.more_images_forward = ttk.Button(radio_frame, text="Stop", command=self.stop_program)
+        self.more_images_forward.pack(side='right', padx=(5, 5))
 
 
         # Initialize canvas
@@ -125,6 +209,7 @@ class ImageDisplayApp(tk.Tk):
         self.frame_rate = frame_rate
         self.all_points_data = {}
         self.update_radiobuttons()
+        self.stop_callback = stop_callback
 
         self.frame_index = []
         for file in os.listdir(self.frame_dir):
@@ -133,6 +218,24 @@ class ImageDisplayApp(tk.Tk):
         
 
         
+    def delete_files():
+        mask_path = ""
+        point_path = ""
+        folder_dir = ""
+
+        if os.path.exists(mask_path):
+            os.remove(mask_path)
+        if  os.path.exists(point_path):
+            os.remove(point_path)
+        if  os.path.exists(folder_dir):
+            os.remove(folder_dir)
+
+
+    def stop_program(self):
+        """Function to stop the program and signal the loop to exit."""
+        if self.stop_callback:
+            self.stop_callback()  # Call the stop callback to stop the loop
+        self.destroy()
 
 
     def update_radiobuttons(self):
@@ -194,7 +297,7 @@ class ImageDisplayApp(tk.Tk):
                 self.update_radiobuttons()
                 self.new_option_entry.delete(0, tk.END)
         else:
-            print()
+            print(self.save_to_json())
 
 
     def on_checkbox_toggled(self):
@@ -672,6 +775,26 @@ class ImageDisplayApp(tk.Tk):
         # Save the all_points_data dictionary to a JSON file
         with open(points_json_file, 'w') as file:
             json.dump(self.all_points_data, file, indent=4)  # Save with pretty printing
+
+
+
+
+    def save_to_json(self, frame_number, mask):
+        json_path = os.path.join(self.working_dir, f"{str(os.path.basename(self.working_dir))}.json")
+        
+        # Initialize or load existing data
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as file:
+                json_data = json.load(file)
+        else:
+            json_data = {}
+
+        frame_name = self.frame_index[frame_number]
+        kuerzel = self.options[self.ann_obj_id]
+        
+
+
+        
 
 
 

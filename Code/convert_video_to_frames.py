@@ -25,19 +25,24 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
     cap = cv2.VideoCapture(input_path)
     if not cap.isOpened():
         print(f"Error opening video file: {input_path}")
-        return
+        return False
     
     # Get total number of frames in the video
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     print(f"Total frames in video: {total_frames}")
     
 
+
     if damage_second and not (start_frame and end_frame):
         fps = cap.get(cv2.CAP_PROP_FPS)
         damage_frame = damage_second * fps
-        start_frame = max(0, int(damage_frame - rewind_seconds * fps))
-        end_frame = min(total_frames, int(damage_frame - proceed_seconds * fps))
-        print(f"Damage Second: {damage_second} Damage Frame: {damage_frame}")
+
+        if damage_frame > total_frames:
+            return False
+        else:
+            start_frame = max(0, int(damage_frame - rewind_seconds * fps))
+            end_frame = min(total_frames, int(damage_frame - proceed_seconds * fps))
+            print(f"Damage Second: {damage_second} Damage Frame: {damage_frame}")
 
 
     elif not (start_frame and end_frame):
@@ -68,7 +73,7 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
 
     cap.release()
     print(f"Frames have been saved to {frame_dir}.")
-    return frame_dir, input_path
+    return True
 
 
 def rename_images_in_directory(directory):
