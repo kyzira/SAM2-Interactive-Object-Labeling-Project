@@ -14,8 +14,6 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
 import json
-from skimage import measure
-
 
 # Initialize the predictor as needed
 sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
@@ -261,9 +259,6 @@ class ImageDisplayApp(tk.Tk):
             # Store the check_var in a dictionary with the option as the key
             self.checkbox_vars[option] = check_var
 
-            # Optionally create directories or perform additional logic
-            current_damage_dir = os.path.join(self.working_dir, str(option))
-            os.makedirs(current_damage_dir, exist_ok=True)
 
         # Set the default selection to the first option
         if self.options:
@@ -542,7 +537,7 @@ class ImageDisplayApp(tk.Tk):
             (255, 0, 255, 100)  # Magenta with transparency
         ]
 
-
+        # update radiobuttons
         for _, frame_data in self.json_content.items():
             if "Befunde" in frame_data:
                 befunde = frame_data['Befunde']
@@ -563,37 +558,38 @@ class ImageDisplayApp(tk.Tk):
             img_height = int(cell_height)
             base_filename = os.path.basename(img_path)
 
+            # Wenn das Bild in der Json genannt wird dann führe aus
             if base_filename in self.json_content:
-                kuerzel = self.options[self.ann_obj_id]
+                # kuerzel = self.options[self.ann_obj_id]
 
-                # Create a transparent overlay for polygons
-                overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
-                overlay_draw = ImageDraw.Draw(overlay, "RGBA")
-
-                if kuerzel in self.json_content[base_filename]["Befunde"]:
-                    schaden_data = self.json_content[base_filename]["Befunde"][kuerzel]
-
-                    for _, schaden_info in schaden_data.items():
-
-                        polygons = schaden_info["Maske"]
-                        
-                        option_index = self.options.index(kuerzel)
-                        color = colors[option_index % len(colors)]
-
-                        if self.checkbox_vars[self.options[option_index]].get():
-
-                            for polygon in polygons:
-                                polygon_tuples = [tuple(point) for point in polygon]
-                                if len(polygon_tuples) > 3:
-                                    overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
-
-
+                for kuerzel in self.options:
                 
-                # Composite the overlay with the original image
-                if img.mode != 'RGBA':
-                    img = img.convert('RGBA')
-                img = Image.alpha_composite(img, overlay)
-                img = img.convert("RGB")
+                    # Create a transparent overlay for polygons
+                    overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+                    overlay_draw = ImageDraw.Draw(overlay, "RGBA")
+
+                    if kuerzel in self.json_content[base_filename]["Befunde"]:
+                        schaden_data = self.json_content[base_filename]["Befunde"][kuerzel]
+
+                        for _, schaden_info in schaden_data.items():
+
+                            polygons = schaden_info["Maske"]
+                            
+                            option_index = self.options.index(kuerzel)
+                            color = colors[option_index % len(colors)]
+
+                            if self.checkbox_vars[self.options[option_index]].get():
+
+                                for polygon in polygons:
+                                    polygon_tuples = [tuple(point) for point in polygon]
+                                    if len(polygon_tuples) > 3:
+                                        overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+
+                    # Composite the overlay with the original image
+                    if img.mode != 'RGBA':
+                        img = img.convert('RGBA')
+                    img = Image.alpha_composite(img, overlay)
+                    img = img.convert("RGB")
 
 
             # Resize the image
