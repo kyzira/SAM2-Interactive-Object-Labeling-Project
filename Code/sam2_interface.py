@@ -122,7 +122,7 @@ class ImageDisplayApp(tk.Tk):
 
 
         # Button to delete labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="delete unselected labels", command=self.destroy)
+        self.more_images_forward = ttk.Button(radio_frame, text="delete unselected labels", command=self.delete_damage)
         self.more_images_forward.pack(side='left', padx=(5, 5))
 
         # Button to skip to next label
@@ -189,8 +189,6 @@ class ImageDisplayApp(tk.Tk):
         self.current_index = 0
         self.select_directory()
         self.video_path = video_path
-        self.frame_rate = frame_rate
-        self.all_points_data = {}
         self.update_radiobuttons()
         self.stop_callback = stop_callback
 
@@ -209,7 +207,21 @@ class ImageDisplayApp(tk.Tk):
         
 
         
-    #def delete_files():
+    def delete_damage(self):
+        self.json_content = self.load_json()
+
+        for option in self.options:
+            if not self.checkbox_vars[option].get():
+                self.options.remove(option)
+                self.update_radiobuttons()
+
+                # delete all entries from json
+                for image in self.json_content:
+                    if option in self.json_content[image]["Befunde"]:
+                        del self.json_content[image]["Befunde"][option]
+        self.save_json(self.json_content)
+
+
 
 
 
@@ -729,6 +741,9 @@ class ImageDisplayApp(tk.Tk):
     def load_set_points(self):
         # Reset predictor
         predictor.reset_state(self.inference_state)
+
+        if not self.options:
+            return
 
         self.get_selected_option_index()
         kuerzel = self.options[self.ann_obj_id]
