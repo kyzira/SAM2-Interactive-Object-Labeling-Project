@@ -31,8 +31,6 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 
-    
-
 
 class Damage_info:
     def __init__(self, maske = [], pos_punkte = [], neg_punkte = []):
@@ -75,7 +73,7 @@ class Frame:
     def to_dict(self):
         return {
             'Frame': self.name,
-            'Befunde': {damage.type_of_damage: damage.to_dict() for damage in self.damages.values()}
+            'Observations': {damage.type_of_damage: damage.to_dict() for damage in self.damages.values()}
         }
     
 
@@ -130,7 +128,7 @@ class ImageDisplayApp(tk.Tk):
         self.more_images_forward.pack(side='right', padx=(5, 5))
 
         # Button to stop labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="Stop", command=self.stop_program)
+        self.more_images_forward = ttk.Button(radio_frame, text="Cancel", command=self.stop_program)
         self.more_images_forward.pack(side='right', padx=(5, 5))
 
 
@@ -217,8 +215,8 @@ class ImageDisplayApp(tk.Tk):
 
                 # delete all entries from json
                 for image in self.json_content:
-                    if option in self.json_content[image]["Befunde"]:
-                        del self.json_content[image]["Befunde"][option]
+                    if option in self.json_content[image]["Observations"]:
+                        del self.json_content[image]["Observations"][option]
         self.save_json(self.json_content)
 
 
@@ -551,9 +549,9 @@ class ImageDisplayApp(tk.Tk):
 
         # update radiobuttons
         for _, frame_data in self.json_content.items():
-            if "Befunde" in frame_data:
-                befunde = frame_data['Befunde']
-                for kuerzel, _ in befunde.items():
+            if "Observations" in frame_data:
+                Observations = frame_data['Observations']
+                for kuerzel, _ in Observations.items():
                     if kuerzel not in self.options:
                         self.options.append(kuerzel)
                         self.update_radiobuttons()
@@ -580,8 +578,8 @@ class ImageDisplayApp(tk.Tk):
                     overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
                     overlay_draw = ImageDraw.Draw(overlay, "RGBA")
 
-                    if kuerzel in self.json_content[base_filename]["Befunde"]:
-                        schaden_data = self.json_content[base_filename]["Befunde"][kuerzel]
+                    if kuerzel in self.json_content[base_filename]["Observations"]:
+                        schaden_data = self.json_content[base_filename]["Observations"][kuerzel]
 
                         for _, schaden_info in schaden_data.items():
 
@@ -751,10 +749,10 @@ class ImageDisplayApp(tk.Tk):
         self.json_content = self.load_json()
 
         for frame_name, frame_data in self.json_content.items():
-            if "Befunde" in frame_data:
-                befunde = frame_data['Befunde']
-                if kuerzel in befunde:
-                    kuerzel_data = befunde[kuerzel]
+            if "Observations" in frame_data:
+                Observations = frame_data['Observations']
+                if kuerzel in Observations:
+                    kuerzel_data = Observations[kuerzel]
                     
                     set_points = []
                     set_labels = []
@@ -812,7 +810,7 @@ class ImageDisplayApp(tk.Tk):
                      
         damage = Damage(kuerzel)  
         damage.add_info(Damage_info(maske=maske, pos_punkte=pos_punkte, neg_punkte=neg_punkte)) 
-        self.json_content[frame_name]['Befunde'][kuerzel] = damage.to_dict()
+        self.json_content[frame_name]['Observations'][kuerzel] = damage.to_dict()
 
    
             
