@@ -33,41 +33,22 @@ if torch.cuda.get_device_properties(0).major >= 8:
 predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 
-
-
-class Koordinaten:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def to_dict(self):
-        return{
-            'x': self.x, 
-            'y': self.y
-        }
     
-
-class Gesetzte_Punkte:
-    def __init__(self, pos_punkte, neg_punkte):
-        self.pos_punkte = pos_punkte
-        self.neg_punkte = neg_punkte
-
-    def to_dict(self):
-        return {
-            '1': self.pos_punkte,
-            '0': self.neg_punkte
-        }
 
 
 class Damage_info:
-    def __init__(self, maske, punkte_klasse):
-        self.punkte = punkte_klasse 
+    def __init__(self, maske = [], pos_punkte = [], neg_punkte = []):
         self.maske = maske
-    
+        self.pos_punkte = pos_punkte
+        self.neg_punkte = neg_punkte
+            
     def to_dict(self):
         return {
             'Maske': self.maske,
-            'Punkte': self.punkte.to_dict() 
+            'Punkte':{
+            '1': self.pos_punkte,
+            '0': self.neg_punkte
+            }
         }
 
 
@@ -81,24 +62,25 @@ class Damage:
 
     def to_dict(self):
         return {
-            'Kürzel': self.type_of_damage,
-            'Instanz': [damage_info.to_dict() for damage_info in self.ids]  
+            **{str(index): damage_info.to_dict() for index, damage_info in enumerate(self.ids)} 
         }
 
 
 class Frame:
     def __init__(self, name):
-        self.name = name 
-        self.damages = [] 
+        self.name = name
+        self.damages = {}
 
     def add_damage(self, damage):
-        self.damages.append(damage)  
+        self.damages[damage.type_of_damage] = damage
 
     def to_dict(self):
         return {
             'Frame': self.name,
-            'Befunde': [damage.to_dict() for damage in self.damages] 
+            'Befunde': {damage.type_of_damage: damage.to_dict() for damage in self.damages.values()}
         }
+    
+
 
 
 
@@ -198,6 +180,9 @@ class ImageDisplayApp(tk.Tk):
 
         self.points = []
         self.labels = []
+        self.frame_for_point = None
+
+
         self.inference_state = None
         self.frame_dir = frame_dir
         self.working_dir = os.path.dirname(frame_dir)
@@ -211,24 +196,23 @@ class ImageDisplayApp(tk.Tk):
         self.update_radiobuttons()
         self.stop_callback = stop_callback
 
-        self.frame_index = []
+        self.frames = {}
+
+        self.json_path = os.path.join(self.working_dir, f"{str(os.path.basename(self.working_dir))}.json")
+        self.json_content = {}
+
+
         for file in os.listdir(self.frame_dir):
             if file.endswith(".jpg"):
-                self.frame_index.append(file)
+                frame = Frame(file)
+                self.frames[file] = frame
+        
+        
         
 
         
-    def delete_files():
-        mask_path = ""
-        point_path = ""
-        folder_dir = ""
+    #def delete_files():
 
-        if os.path.exists(mask_path):
-            os.remove(mask_path)
-        if  os.path.exists(point_path):
-            os.remove(point_path)
-        if  os.path.exists(folder_dir):
-            os.remove(folder_dir)
 
 
     def stop_program(self):
@@ -266,7 +250,7 @@ class ImageDisplayApp(tk.Tk):
             frame.pack(side='left', padx=5)
 
             # Create the radio button
-            rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg='white')
+            rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg='white', command=self.radio_button_value_changed)
             rb.pack()
 
             # Create a Checkbutton below each Radiobutton
@@ -297,12 +281,15 @@ class ImageDisplayApp(tk.Tk):
                 self.update_radiobuttons()
                 self.new_option_entry.delete(0, tk.END)
         else:
-            print(self.save_to_json())
+            self.load_set_points()
 
 
     def on_checkbox_toggled(self):
         self.display_images()
 
+
+    def radio_button_value_changed(self):
+        self.load_set_points()
 
 
     def get_selected_option_index(self):
@@ -520,7 +507,7 @@ class ImageDisplayApp(tk.Tk):
 
         self.canvas.delete("all")
 
-        self.load_all_set_points()
+        self.load_set_points()
 
         # Get canvas size
         canvas_width = self.canvas.winfo_width()
@@ -555,18 +542,15 @@ class ImageDisplayApp(tk.Tk):
             (255, 0, 255, 100)  # Magenta with transparency
         ]
 
-        # Find subfolders with masks.json files in the working directory
-        mask_folders = []
-        for folder_name in os.listdir(self.working_dir):
-            folder_path = os.path.join(self.working_dir, folder_name)
-            if os.path.isdir(folder_path):
-                mask_file = os.path.join(folder_path, "masks.json")
-                if os.path.isfile(mask_file):
-                    mask_folders.append((folder_name, mask_file))
-                    if folder_name not in self.options:
-                        self.options.append(folder_name)
+
+        for _, frame_data in self.json_content.items():
+            if "Befunde" in frame_data:
+                befunde = frame_data['Befunde']
+                for kuerzel, _ in befunde.items():
+                    if kuerzel not in self.options:
+                        self.options.append(kuerzel)
                         self.update_radiobuttons()
-                        
+
 
         for i in range(grid_size * grid_size):
             img_index = start_index + i
@@ -577,39 +561,40 @@ class ImageDisplayApp(tk.Tk):
             img = self.images[img_index]
             img_width = int(cell_width)
             img_height = int(cell_height)
+            base_filename = os.path.basename(img_path)
 
-
-            if mask_folders:
-                base_filename = os.path.basename(img_path)
+            if base_filename in self.json_content:
+                kuerzel = self.options[self.ann_obj_id]
 
                 # Create a transparent overlay for polygons
                 overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
                 overlay_draw = ImageDraw.Draw(overlay, "RGBA")
 
-                # Load and apply polygons from each masks.json in different colors
-                for (folder_name, mask_file) in mask_folders:
-                    with open(mask_file, 'r') as f:
-                        polygon_data = json.load(f)
+                if kuerzel in self.json_content[base_filename]["Befunde"]:
+                    schaden_data = self.json_content[base_filename]["Befunde"][kuerzel]
 
-                    if base_filename in polygon_data:
-                        polygons = polygon_data[base_filename]
+                    for _, schaden_info in schaden_data.items():
 
-                        option_index = self.options.index(folder_name)
-
-                        # Set a unique color for this mask.json file (loop through the colors if there are more mask files than colors)
+                        polygons = schaden_info["Maske"]
+                        
+                        option_index = self.options.index(kuerzel)
                         color = colors[option_index % len(colors)]
 
                         if self.checkbox_vars[self.options[option_index]].get():
-                            # Draw polygons in the assigned color
+
                             for polygon in polygons:
                                 polygon_tuples = [tuple(point) for point in polygon]
-                                overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+                                if len(polygon_tuples) > 3:
+                                    overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
+
+                
                 # Composite the overlay with the original image
                 if img.mode != 'RGBA':
                     img = img.convert('RGBA')
                 img = Image.alpha_composite(img, overlay)
                 img = img.convert("RGB")
+
 
             # Resize the image
             img = img.resize((img_width, img_height), Image.Resampling.LANCZOS)
@@ -719,7 +704,7 @@ class ImageDisplayApp(tk.Tk):
                     all_set_points = json.load(file)
                 
                 for frame_name in all_set_points:
-                    index = self.frame_index.index(frame_name)
+                    index = list(self.frames.keys()).index(frame_name)
 
                     point_list = []
                     label_list = []
@@ -743,61 +728,93 @@ class ImageDisplayApp(tk.Tk):
                             points = points_array,
                             labels = labels_array,
                         )
+    
 
+    def load_set_points(self):
+        # Reset predictor
+        predictor.reset_state(self.inference_state)
 
-
-    def save_points_to_file(self, frame_number):
-        """Save points and labels to a single JSON file sorted by frame and then by label."""
-        # Check if the frame number is within the valid range
-        if frame_number < 0 or frame_number >= len(self.image_paths):
-            print("Frame number out of range")
-            return
-        
-        points_json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], 'set_points.json')
-
-        if os.path.exists(points_json_file):
-            with open(points_json_file, 'r') as file:
-                self.all_points_data = json.load(file)
-
-
-        frame_index = self.frame_index
-        # Ensure that the dictionary has an entry for the current frame using the frame number as the key
-        if frame_index[frame_number] not in self.all_points_data:
-            self.all_points_data[frame_index[frame_number]] = {0: [], 1: []}  # Initialized with empty lists for labels
-
-
-        # Collect points and labels for the current frame
-        for point, label in zip(self.points, self.labels):
-            if label in self.all_points_data[frame_index[frame_number]]:  # Using frame_number as the key directly
-                self.all_points_data[frame_index[frame_number]][label].append({"x": int(point[0]), "y": int(point[1])})
-
-
-        # Save the all_points_data dictionary to a JSON file
-        with open(points_json_file, 'w') as file:
-            json.dump(self.all_points_data, file, indent=4)  # Save with pretty printing
-
-
-
-
-    def save_to_json(self, frame_number, mask):
-        json_path = os.path.join(self.working_dir, f"{str(os.path.basename(self.working_dir))}.json")
-        
-        # Initialize or load existing data
-        if os.path.exists(json_path):
-            with open(json_path, 'r') as file:
-                json_data = json.load(file)
-        else:
-            json_data = {}
-
-        frame_name = self.frame_index[frame_number]
+        self.get_selected_option_index()
         kuerzel = self.options[self.ann_obj_id]
-        
+
+        self.json_content = self.load_json()
+
+        for frame_name, frame_data in self.json_content.items():
+            if "Befunde" in frame_data:
+                befunde = frame_data['Befunde']
+                if kuerzel in befunde:
+                    kuerzel_data = befunde[kuerzel]
+                    
+                    set_points = []
+                    set_labels = []
+
+                    # Iteriere über die Indizes im Kürzel
+                    for index, damage_info in kuerzel_data.items():
+                        
+                        if "Punkte" in damage_info:
+                            pos_punkte = damage_info['Punkte'].get('1', [])
+                            neg_punkte = damage_info['Punkte'].get('0', [])
+                            
+                            for punkt in pos_punkte:
+                                set_points.append(punkt)
+                                set_labels.append(1)
+                            for punkt in neg_punkte:
+                                set_points.append(punkt)
+                                set_labels.append(0)
+
+                    index = list(self.frames.keys()).index(frame_name)
+
+                    if set_points and set_labels:
+                        # Convert the list of points to a NumPy array
+                        points_array = np.array(set_points, dtype=np.float32)
+                        labels_array = np.array(set_labels, dtype=np.int32)
+                        
+                        _, _, _ = predictor.add_new_points_or_box(
+                            inference_state = self.inference_state,
+                            frame_idx = index,
+                            obj_id = self.ann_obj_id,
+                            points = points_array,
+                            labels = labels_array,
+                        )
+                            
 
 
-        
+    def save_to_json(self, frame_number, maske):
+        frame_names = list(self.frames.keys())
+        frame_name = frame_names[frame_number]
+
+        kuerzel = self.options[self.ann_obj_id]
+
+        if frame_name not in self.json_content:
+            frame = Frame(frame_name)
+            self.json_content[frame_name] = frame.to_dict()  # Convert Frame to dict here
+            
+        pos_punkte = []
+        neg_punkte = []
+
+        if self.frame_for_point == frame_number:
+            for point, label in zip(self.points, self.labels):
+                if label == 1:
+                    pos_punkte.append([int(point[0]), int(point[1])])
+                elif label == 0:
+                    neg_punkte.append([int(point[0]), int(point[1])])
+                     
+        damage = Damage(kuerzel)  
+        damage.add_info(Damage_info(maske=maske, pos_punkte=pos_punkte, neg_punkte=neg_punkte)) 
+        self.json_content[frame_name]['Befunde'][kuerzel] = damage.to_dict()
+
+   
+            
+    def load_json(self):
+        if os.path.exists(self.json_path):
+            with open(self.json_path, 'r') as file:
+                return json.load(file)
+        return {}  # Return an empty dict if the file doesn't exist
 
 
-
+    def save_json(self, data):
+        with open(self.json_path, "w") as outfile:
+            json.dump(data, outfile, indent=4)
 
 
     def add_points(self, image, frame_number):
@@ -886,7 +903,7 @@ class ImageDisplayApp(tk.Tk):
 
         def on_close():
             self.wait_label.config(text="")
-            self.save_points_to_file(frame_number)
+            self.frame_for_point = frame_number
             annotation_window.destroy()
             self.show_propagated_images()
 
@@ -913,13 +930,13 @@ class ImageDisplayApp(tk.Tk):
     def show_propagated_images(self):
         """Run propagation throughout the video and save the results."""
         video_segments = {}  # video_segments contains the per-frame segmentation results
+        self.json_content = self.load_json()
 
         for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state):
             video_segments[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                 for i, out_obj_id in enumerate(out_obj_ids)
             }
-
 
         for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state, reverse=True):
             if out_frame_idx not in video_segments:
@@ -929,63 +946,37 @@ class ImageDisplayApp(tk.Tk):
                     video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
                 else:
                     # Optionally merge or update masks if needed
-                    video_segments[out_frame_idx][out_obj_id] = np.maximum(video_segments[out_frame_idx][out_obj_id], (out_mask_logits[i] > 0.0).cpu().numpy())
-
-
-        def is_collinear(p1, p2, p3):
-            """ Check if three points are collinear """
-            return (p2[1] - p1[1]) * (p3[0] - p2[0]) == (p2[0] - p1[0]) * (p3[1] - p2[1])
-        
-        frame_number = self.frame_index
-
-        # Dictionary to hold all frame data
-        all_frame_data = {}
+                    video_segments[out_frame_idx][out_obj_id] = np.maximum(
+                        video_segments[out_frame_idx][out_obj_id],
+                        (out_mask_logits[i] > 0.0).cpu().numpy()
+                    )
 
         for out_frame_idx, masks in video_segments.items():
-            # Create a list to hold all mask data for the current frame
+            # Create a list to hold all mask data for the current frame    
             mask_data = []
+
             for out_obj_id, out_mask in masks.items():
                 # Remove singleton dimensions
                 out_mask = np.squeeze(out_mask)  # Squeeze to remove dimensions of size 1
+                
+                # Extract contours using OpenCV
+                contours, _ = cv2.findContours(out_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                # Extract the contours of the mask
-                contours = measure.find_contours(out_mask, 0.5)  # Adjust the level as necessary
+                for contour in contours:
+                    # Simplify the contour using approxPolyDP
+                    epsilon = 0.005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+                    simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
 
-                # If contours were found, process them
-                if contours:
-                    for contour in contours:
-                        contour = np.flip(contour, axis=1)
+                    # Convert contour points to a list of tuples
+                    simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
+                    
+                    mask_data.append(simplified_contour)
 
-                        # Convert coordinates to integers
-                        contour = [(int(x), int(y)) for x, y in contour]
+            self.save_to_json(out_frame_idx, mask_data)
 
-                        # Filter to keep only start and end points of straight lines
-                        filtered_contour = []
-                        if len(contour) > 1:
-                            filtered_contour.append(contour[0])  # Always add the first point
-                            for i in range(1, len(contour) - 1):
-                                if not is_collinear(contour[i-1], contour[i], contour[i+1]):
-                                    filtered_contour.append(contour[i])  # Add the point if not collinear
-                            filtered_contour.append(contour[-1])  # Always add the last point
-                        
-                        # Append filtered coordinates to mask_data
-                        mask_data.append(filtered_contour)
-
-            # Add mask data to all_frame_data with the frame number as the key
-            all_frame_data[frame_number[out_frame_idx]] = mask_data
-
-        # Sort the all_frame_data dictionary according to the order in frame_number
-        sorted_frame_data = {frame_number[i]: all_frame_data[frame_number[i]] for i in range(len(frame_number)) if frame_number[i] in all_frame_data}
-
-        # Construct the filename for saving the mask data as a single JSON file
-        json_file = os.path.join(self.working_dir, self.options[self.ann_obj_id], "masks.json")
-
-        # Save the sorted all_frame_data dictionary to a JSON file
-        with open(json_file, 'w') as f:
-            json.dump(sorted_frame_data, f, indent=4)  # Save with pretty printing
-            
+        self.save_json(self.json_content)
         self.update_grid()
-  
+    
 
     def run(self):
         """Start the Tkinter event loop."""
