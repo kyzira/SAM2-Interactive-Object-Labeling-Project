@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
 import json
+from annotation_window import AnnotationWindow
 
 # Initialize the predictor as needed
 sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
@@ -65,7 +66,7 @@ class Damage:
 class Frame:
     def __init__(self, name):
         self.name = name
-        self.damages = {}
+        self.damages = dict()
 
     def add_damage(self, damage):
         self.damages[damage.type_of_damage] = damage
@@ -189,6 +190,7 @@ class ImageDisplayApp(tk.Tk):
         self.video_path = video_path
         self.update_radiobuttons()
         self.stop_callback = stop_callback
+        self.last_option = None
 
         self.frames = {}
 
@@ -505,7 +507,7 @@ class ImageDisplayApp(tk.Tk):
             self.update_grid()  # Refresh the grid and slider based on new images
 
 
-    def display_images(self, *args):
+    def display_images(self):
         """Displays images in a grid format on the canvas."""
         if not self.initialized:
             return
@@ -584,7 +586,10 @@ class ImageDisplayApp(tk.Tk):
                         for _, schaden_info in schaden_data.items():
 
                             polygons = schaden_info["Maske"]
-                            
+                            points = schaden_info["Punkte"]
+                            pos_points = points["1"]
+                            neg_points = points["0"]
+
                             option_index = self.options.index(kuerzel)
                             color = colors[option_index % len(colors)]
 
@@ -594,6 +599,19 @@ class ImageDisplayApp(tk.Tk):
                                     polygon_tuples = [tuple(point) for point in polygon]
                                     if len(polygon_tuples) > 3:
                                         overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+
+                                # Draw positive points (green circles)
+                                for point in pos_points:
+                                    x, y = point
+                                    radius = 5
+                                    overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(0, 255, 0, 255))
+
+                                # Draw negative points (red circles)
+                                for point in neg_points:
+                                    x, y = point
+                                    radius = 5
+                                    overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 0, 0, 255))
+
 
                     # Composite the overlay with the original image
                     if img.mode != 'RGBA':
@@ -661,7 +679,7 @@ class ImageDisplayApp(tk.Tk):
 
     def on_canvas_click(self, event):
 
-        self.wait_label.config(text="Bitte Warten! Bilder werden berechnet")
+        self.wait_label.config(text= "Bitte Warten! Bilder werden berechnet")
 
         """Handle mouse click events on the canvas."""
         x, y = event.x, event.y
@@ -698,54 +716,20 @@ class ImageDisplayApp(tk.Tk):
         self.add_points(selected_image, index)
         
 
-    def load_all_set_points(self):
-        all_set_points = []
-        # Reset predictor
-        predictor.reset_state(self.inference_state)
-
-        for option_index, option in enumerate(self.options):
-            set_points_path = os.path.join(self.working_dir, option, "set_points.json")
-            if os.path.exists(set_points_path):
-                with open(set_points_path, 'r') as file:
-                    all_set_points = json.load(file)
-                
-                for frame_name in all_set_points:
-                    index = list(self.frames.keys()).index(frame_name)
-
-                    point_list = []
-                    label_list = []
-                    
-                    # Access the points and labels for each frame
-                    for label, points in all_set_points[frame_name].items():
-                        for point in points:  
-                            point_list.append([point['x'], point['y']]) 
-                            label_list.append(int(label))
-
-
-                    if point_list and label_list:
-                        # Convert the list of points to a NumPy array
-                        points_array = np.array(point_list, dtype=np.float32)
-                        labels_array = np.array(label_list, dtype=np.int32)
-                        
-                        _, _, _ = predictor.add_new_points_or_box(
-                            inference_state = self.inference_state,
-                            frame_idx = index,
-                            obj_id = option_index,
-                            points = points_array,
-                            labels = labels_array,
-                        )
-    
-
     def load_set_points(self):
-        # Reset predictor
-        predictor.reset_state(self.inference_state)
+        
+        kuerzel = self.options[self.ann_obj_id]
+
+        if self.last_option != kuerzel:
+            # Reset predictor
+            self.last_option = kuerzel
+            predictor.reset_state(self.inference_state)
 
         if not self.options:
             return
 
         self.get_selected_option_index()
-        kuerzel = self.options[self.ann_obj_id]
-
+        
         self.json_content = self.load_json()
 
         for frame_name, frame_data in self.json_content.items():
@@ -832,108 +816,9 @@ class ImageDisplayApp(tk.Tk):
         self.labels = []
         self.get_selected_option_index()
 
-        # Convert the PIL image to a NumPy array
-        image_np = np.array(image)
-
         # Create a new top-level window for annotation
-        annotation_window = tk.Toplevel(self)
-        annotation_window.title(f"Punkte für {self.options[self.ann_obj_id]} hinzufügen")
-
-        # Define event handlers
-        def on_click(event):
-            if event.xdata is not None and event.ydata is not None:
-                ix, iy = int(event.xdata), int(event.ydata)
-                if event.button == 1:  # Left click
-                    print(f"Left click at ({ix}, {iy}) - 1")
-                    self.points.append([ix, iy])
-                    self.labels.append(1)
-                elif event.button == 3:  # Right click
-                    print(f"Right click at ({ix}, {iy}) - 0")
-                    self.points.append([ix, iy])
-                    self.labels.append(0)
-                update_mask(frame_number)
-
-        def on_key_press(event):
-            if event.key == "backspace":
-                if self.points:
-                    self.points.pop()
-                    self.labels.pop()
-                    update_mask(frame_number)
-                else:
-                    # Clear the mask and show the original image if no points are left
-                    ax.clear()
-                    ax.imshow(image_np, aspect='equal')
-                    ax.axis('off')
-                    canvas.draw()
-
-        def update_mask(frame_number):
-            if self.points and self.labels:
-                points_np = np.array(self.points, dtype=np.float32)
-                labels_np = np.array(self.labels, dtype=np.float32)
-
-                _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
-                    inference_state=self.inference_state,
-                    frame_idx=frame_number,
-                    obj_id=int(self.ann_obj_id),
-                    points=points_np,
-                    labels=labels_np,
-                )
-                
-                # Clear previous plot and update the mask
-                ax.clear()
-                ax.imshow(image_np, aspect='equal')  # Maintain aspect ratio
-                ax.axis('off')  # Ensure axes are completely off
-                show_points(points_np, labels_np, ax)
-                show_mask((out_mask_logits[0] > 0.0).cpu().numpy(), ax, obj_id=out_obj_ids[0])
-                canvas.draw()
-            else:
-                # If no points are left, clear the mask and show the original image
-                ax.clear()
-                ax.imshow(image_np, aspect='equal')
-                ax.axis('off')
-                canvas.draw()
-
-        def show_mask(mask, ax, obj_id=None, random_color=False):
-            if random_color:
-                color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-            else:
-                cmap = plt.get_cmap("tab10")
-                cmap_idx = 0 if obj_id is None else obj_id
-                color = np.array([*cmap(cmap_idx)[:3], 0.6])
-            h, w = mask.shape[-2:]
-            mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-            ax.imshow(mask_image, alpha=0.5)
-
-        def show_points(coords, labels, ax, marker_size=200):
-            pos_points = coords[labels == 1]
-            neg_points = coords[labels == 0]
-            ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-            ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-
-        def on_close():
-            self.wait_label.config(text="")
-            self.frame_for_point = frame_number
-            annotation_window.destroy()
-            self.show_propagated_images()
-
-        # Create a Matplotlib figure and axis for the image
-        fig = plt.Figure(figsize=(6, 6), dpi=100)
-        ax = fig.add_subplot(111)
-
-        # Display the image
-        ax.imshow(image_np, aspect='equal')
-        ax.axis('off')
-
-        # Create a canvas for the Matplotlib figure in the new window
-        canvas = FigureCanvasTkAgg(fig, master=annotation_window)
-        canvas.draw()
-        canvas.get_tk_widget().pack(side=tk.LEFT, fill=tk.BOTH, expand=1)
-
-        # Bind mouse click and key press events
-        fig.canvas.mpl_connect('button_press_event', on_click)
-        fig.canvas.mpl_connect('key_press_event', on_key_press)
-
-        annotation_window.protocol("WM_DELETE_WINDOW", on_close)
+        annotationWindow = AnnotationWindow(f"Punkte für {self.options[self.ann_obj_id]} hinzufügen")
+        annotationWindow.display_image(image)
 
 
     def show_propagated_images(self):
@@ -973,7 +858,7 @@ class ImageDisplayApp(tk.Tk):
 
                 for contour in contours:
                     # Simplify the contour using approxPolyDP
-                    epsilon = 0.005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+                    epsilon = 0.001 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
                     simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
 
                     # Convert contour points to a list of tuples
