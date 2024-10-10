@@ -453,9 +453,6 @@ class ImageDisplayApp(tk.Tk):
 
 
 
-
-
-
     def slider_update(self, current_index):
         """Update image display when the slider is moved."""
         #current_index = self.image_slider.get()
@@ -485,6 +482,15 @@ class ImageDisplayApp(tk.Tk):
  
 
 
+    def on_canvas_click(self, event):
+
+        """Handle mouse click events on the canvas."""
+        x, y = event.x, event.y
+
+        cell_width , cell_height, grid_size = self.get_canvas_info()
+
+        row = int(y // cell_height)
+        col = int(x // cell_width)
 
     def run(self):
         """Start the Tkinter event loop."""
