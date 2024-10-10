@@ -5,81 +5,13 @@ This Programm loads images from a directory and lets you iteractively use SAM2 t
 import tkinter as tk
 from tkinter import ttk, filedialog
 from PIL import Image, ImageTk, ImageDraw
-import torch
 import os
 import numpy as np
 import cv2
-from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import convert_video_to_frames
-import json
 from annotation_window import AnnotationWindow
-
-# Initialize the predictor as needed
-sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
-model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
-
-# sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
-# model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
-
-torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
-
-if torch.cuda.get_device_properties(0).major >= 8:
-    torch.backends.cuda.matmul.allow_tf32 = True
-    torch.backends.cudnn.allow_tf32 = True
-
-predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
-
-
-
-class Damage_info:
-    def __init__(self, maske = [], pos_punkte = [], neg_punkte = []):
-        self.maske = maske
-        self.pos_punkte = pos_punkte
-        self.neg_punkte = neg_punkte
-            
-    def to_dict(self):
-        return {
-            'Maske': self.maske,
-            'Punkte':{
-            '1': self.pos_punkte,
-            '0': self.neg_punkte
-            }
-        }
-
-
-class Damage:
-    def __init__(self, type_of_damage):
-        self.type_of_damage = type_of_damage
-        self.ids = []  
-
-    def add_info(self, damage_info):
-        self.ids.append(damage_info) 
-
-    def to_dict(self):
-        return {
-            **{str(index): damage_info.to_dict() for index, damage_info in enumerate(self.ids)} 
-        }
-
-
-class Frame:
-    def __init__(self, name):
-        self.name = name
-        self.damages = dict()
-
-    def add_damage(self, damage):
-        self.damages[damage.type_of_damage] = damage
-
-    def to_dict(self):
-        return {
-            'Frame': self.name,
-            'Observations': {damage.type_of_damage: damage.to_dict() for damage in self.damages.values()}
-        }
-    
-
-
-
 
 
 class ImageDisplayApp(tk.Tk):
@@ -175,12 +107,6 @@ class ImageDisplayApp(tk.Tk):
         self.more_images_forward.pack(side='left', padx=(5, 0))
 
 
-        self.points = []
-        self.labels = []
-        self.frame_for_point = None
-
-
-        self.inference_state = None
         self.frame_dir = frame_dir
         self.working_dir = os.path.dirname(frame_dir)
         self.output_dir = None
@@ -192,20 +118,8 @@ class ImageDisplayApp(tk.Tk):
         self.stop_callback = stop_callback
         self.last_option = None
 
-        self.frames = {}
-
         self.json_path = os.path.join(self.working_dir, f"{str(os.path.basename(self.working_dir))}.json")
-        self.json_content = {}
-
-
-        for file in os.listdir(self.frame_dir):
-            if file.endswith(".jpg"):
-                frame = Frame(file)
-                self.frames[file] = frame
         
-        
-        
-
         
     def delete_damage(self):
         self.json_content = self.load_json()
@@ -309,122 +223,12 @@ class ImageDisplayApp(tk.Tk):
             self.ann_obj_id = 0
     
 
-    def detect_framerate(self):
-        num1 = None
-        num2 = None
-        frame_files = []
-
-        # Iterate through the files in the directory
-        for file_name in os.listdir(self.frame_dir):
-            file_path = os.path.join(self.frame_dir, file_name)
-            
-            # Skip directories
-            if os.path.isdir(file_path):
-                continue
-            
-            try:
-                # Extract frame number from the file name
-                frame_number = int(file_name.split(".")[0].lstrip("0"))
-                frame_files.append(frame_number)
-            except ValueError:
-                # Skip files that cannot be converted to an integer
-                continue
-
-        # Ensure there are enough frame files to determine framerate
-        if len(frame_files) < 2:
-            print("Not enough numeric frame files to determine framerate.")
-            return None, None, None
-
-        # Sort frame numbers to calculate framerate
-        frame_files = sorted(frame_files)
-        num1 = frame_files[0]
-        num2 = frame_files[1]
-
-        last_num = frame_files[-1]
-        framerate = num2 - num1
-        print(f"Frame numbers detected: {num1}, {num2}")
-        print(f"Framerate: {framerate}")
-
-        return framerate, num1, last_num
-    
-
-
-
-    def find_video_path(self):
-        """Find the video file that corresponds to the frame directory."""
-        # Get the directory name, which is expected to be the same as the video name
-        video_name = os.path.basename(self.frame_dir)
-        
-        # Look for video files in the parent directory of the frame directory
-        parent_dir = os.path.dirname(self.frame_dir)
-        
-        # Possible video extensions, including common variations
-        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.mpg']
-        
-        # Search for the video file
-        for ext in video_extensions:
-            # Check for both lowercase and uppercase versions of the extension
-            for case_ext in [ext, ext.upper()]:
-                potential_video_path = os.path.join(parent_dir, video_name + case_ext)
-                if os.path.isfile(potential_video_path):
-                    return potential_video_path
-        
-        # If the video file is not found in the parent directory, you can search deeper or in other known directories
-        # For now, return None if not found
-        return None
-
-
 
         
     def load_more_images_back(self):
-        """Load previous images."""
-        if not self.initialized:
-            return  # Do nothing if not initialized
-        
-        frame_rate, end_frame, _ = self.detect_framerate()
-        
-        if end_frame is None:
-            print("Error: Could not detect frame rate or end frame.")
-            return
-        
-        if not self.video_path:
-            self.video_path = self.find_video_path()
-
-        video_path = self.video_path
-
-        if not video_path:
-            print("Error: Video path not found.")
-            return
-
-        if end_frame > 8 * frame_rate:
-            start_frame = end_frame - 8 * frame_rate
-            end_frame = end_frame - frame_rate
-        elif end_frame > frame_rate:
-            end_frame = end_frame - frame_rate
-            start_frame = 0
-        else: 
-            return
-
-        print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
-        
         convert_video_to_frames.convert_video(input_path=video_path, start_frame=start_frame, end_frame=end_frame, frame_rate=frame_rate, output_path=self.frame_dir)
-        self.images = []
-        self.image_paths = []
-        
-        # Load images from the directory
-        for file_name in sorted(os.listdir(self.frame_dir)):
-            file_path = os.path.join(self.frame_dir, file_name)
-            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                self.image_paths.append(file_path)
-                img = Image.open(file_path)
-                self.images.append(img)
-        
-        if not self.images:
-            print("No images loaded. Please check the directory or image file formats.")
-            return
-        
-        print(f"Loaded {len(self.images)} images from {self.frame_dir}")
 
+        # call get_info again
         self.inference_state = predictor.init_state(video_path=self.frame_dir)
         predictor.reset_state(self.inference_state)
         self.update_grid()
@@ -433,46 +237,14 @@ class ImageDisplayApp(tk.Tk):
     def load_more_images_forward(self):
         if not self.initialized:
             return  # Do nothing if not initialized
-        
-        frame_rate, _, last_num = self.detect_framerate()
-
-        if not self.video_path:
-            self.video_path = self.find_video_path()
-
-        video_path = self.video_path
-
-        video_capture = cv2.VideoCapture(video_path)
-        total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
-        video_capture.release()
-
-        if total_frames > last_num + frame_rate * 8:
-            end_frame = last_num + frame_rate * 8
-            start_frame = last_num + frame_rate
-        elif total_frames > last_num + frame_rate:
-            end_frame = total_frames
-            start_frame = last_num + frame_rate
-        else:
-            return
-
-        print(f"Loading frames from {start_frame} to {end_frame} from video {video_path}")
-        
+ 
         convert_video_to_frames.convert_video(input_path=video_path, start_frame=start_frame, end_frame=end_frame, frame_rate=frame_rate, output_path=self.frame_dir)
 
         # Clear existing images
         self.images = []
         self.image_paths = []
         
-        # Load images from the directory
-        for file_name in sorted(os.listdir(self.frame_dir)):
-            file_path = os.path.join(self.frame_dir, file_name)
-            if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                self.image_paths.append(file_path)
-                img = Image.open(file_path)
-                self.images.append(img)
-        
-        if not self.images:
-            print("No images loaded. Please check the directory or image file formats.")
-            return
+        # call get_info again
         
         print(f"Loaded {len(self.images)} images from {self.frame_dir}")
 
@@ -498,11 +270,6 @@ class ImageDisplayApp(tk.Tk):
                     img = Image.open(file_path)
                     self.images.append(img)
             print(f"Loaded {len(self.images)} images from {directory}")
- 
-            # Initialize predictor state
-            if not self.predictor_initialized:
-                self.inference_state = predictor.init_state(video_path=self.frame_dir)
-                self.predictor_initialized = True
             
             self.update_grid()  # Refresh the grid and slider based on new images
 
@@ -772,43 +539,6 @@ class ImageDisplayApp(tk.Tk):
                             
 
 
-    def save_to_json(self, frame_number, maske):
-        frame_names = list(self.frames.keys())
-        frame_name = frame_names[frame_number]
-
-        kuerzel = self.options[self.ann_obj_id]
-
-        if frame_name not in self.json_content:
-            frame = Frame(frame_name)
-            self.json_content[frame_name] = frame.to_dict()  # Convert Frame to dict here
-            
-        pos_punkte = []
-        neg_punkte = []
-
-        if self.frame_for_point == frame_number:
-            for point, label in zip(self.points, self.labels):
-                if label == 1:
-                    pos_punkte.append([int(point[0]), int(point[1])])
-                elif label == 0:
-                    neg_punkte.append([int(point[0]), int(point[1])])
-                     
-        damage = Damage(kuerzel)  
-        damage.add_info(Damage_info(maske=maske, pos_punkte=pos_punkte, neg_punkte=neg_punkte)) 
-        self.json_content[frame_name]['Observations'][kuerzel] = damage.to_dict()
-
-   
-            
-    def load_json(self):
-        if os.path.exists(self.json_path):
-            with open(self.json_path, 'r') as file:
-                return json.load(file)
-        return {}  # Return an empty dict if the file doesn't exist
-
-
-    def save_json(self, data):
-        with open(self.json_path, "w") as outfile:
-            json.dump(data, outfile, indent=4)
-
 
     def add_points(self, image, frame_number):
         """Function to handle adding points to an image and updating the mask."""
@@ -823,27 +553,7 @@ class ImageDisplayApp(tk.Tk):
 
     def show_propagated_images(self):
         """Run propagation throughout the video and save the results."""
-        video_segments = {}  # video_segments contains the per-frame segmentation results
         self.json_content = self.load_json()
-
-        for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state):
-            video_segments[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-                for i, out_obj_id in enumerate(out_obj_ids)
-            }
-
-        for out_frame_idx, out_obj_ids, out_mask_logits in predictor.propagate_in_video(self.inference_state, reverse=True):
-            if out_frame_idx not in video_segments:
-                video_segments[out_frame_idx] = {}
-            for i, out_obj_id in enumerate(out_obj_ids):
-                if out_obj_id not in video_segments[out_frame_idx]:
-                    video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
-                else:
-                    # Optionally merge or update masks if needed
-                    video_segments[out_frame_idx][out_obj_id] = np.maximum(
-                        video_segments[out_frame_idx][out_obj_id],
-                        (out_mask_logits[i] > 0.0).cpu().numpy()
-                    )
 
         for out_frame_idx, masks in video_segments.items():
             # Create a list to hold all mask data for the current frame    

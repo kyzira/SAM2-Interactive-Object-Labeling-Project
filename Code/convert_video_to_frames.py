@@ -76,27 +76,15 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
     return True
 
 
-def rename_images_in_directory(directory):
-    files = os.listdir(directory)
-    image_files = [f for f in files if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp'))]
-    image_files.sort()
-
-    # Rename images
-    for index, file_name in enumerate(image_files):
-        new_file_name = f"{index:05d}.jpg"
-        old_file_path = os.path.join(directory, file_name)
-        new_file_path = os.path.join(directory, new_file_name)
-        img = cv2.imread(old_file_path)
-        if img is not None:
-            cv2.imwrite(new_file_path, img)
-            os.remove(old_file_path)
-            print(f"Renamed {file_name} to {new_file_name}")
-        else:
-            print(f"Failed to load {file_name}")
 
 
+def get_total_frames(video_path):
+    
+    video_capture = cv2.VideoCapture(video_path)
+    total_frames = int(video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+    video_capture.release()
 
-
+    return total_frames
 
 
 

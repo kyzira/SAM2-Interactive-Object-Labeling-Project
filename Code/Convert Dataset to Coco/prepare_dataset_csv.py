@@ -33,30 +33,39 @@ def aus_allen_zu_reduzierter_liste():
 
 
 def aus_reduzierter_liste_zu_gleichmaeßiger_liste():
-
     # Path to the input and output files
-    input_file = r"C:\Code Python\automation-with-sam2\alle_schaeden_ueber_900_liste.csv"  # Replace with the path to your input CSV file
-    output_file = r"C:\Code Python\automation-with-sam2\alle_schaeden_gleichmaessige_liste.csv"  # The output file to save the balanced data
+    input_file = r"C:\Code Python\automation-with-sam2\Tabellen\alle_schaeden_gleichmaessige_liste.csv"   # Replace with the path to your input CSV file
+    output_file = r"C:\Code Python\automation-with-sam2\beispiel_liste.csv"  # The output file to save the balanced data
 
     # Load the data from the CSV file
-    df = pd.read_csv(input_file, delimiter=',', on_bad_lines='skip')
+    df = pd.read_csv(input_file, delimiter=';', on_bad_lines='skip')
+    
+    # Print shape of the DataFrame for debugging
+    print(f'DataFrame shape: {df.shape}')
 
-    # Count the occurrences of each unique value in column 5
+    # Check if DataFrame is empty
+    if df.empty:
+        print("DataFrame is empty.")
+        return
+
+    # Check if DataFrame has at least 5 columns
+    if df.shape[1] < 5:
+        print("DataFrame has fewer than 5 columns.")
+        return
+
+    # Count the occurrences of each unique value in column 5 (index 4)
     value_counts = df.iloc[:, 4].value_counts()
-
-    # Find the minimum frequency across all unique values
-    min_count = value_counts.min()
 
     # Initialize a list to store the sampled rows
     sampled_rows = []
 
-    # For each unique value, sample rows to match the count of the least frequent value
+    # For each unique value, sample up to 5 rows
     for value in value_counts.index:
         subset = df[df.iloc[:, 4] == value]
-        if len(subset) > min_count:
-            sampled_subset = subset.sample(n=min_count, random_state=1)  # Set random_state for reproducibility
+        if len(subset) > 5:
+            sampled_subset = subset.sample(n=5, random_state=1)  # Sample 5 rows
         else:
-            sampled_subset = subset  # If there are fewer rows than min_count, take all rows
+            sampled_subset = subset  # If there are fewer rows than 5, take all rows
         sampled_rows.append(sampled_subset)
 
     # Concatenate all sampled subsets
@@ -174,11 +183,13 @@ def get_limited_damage_entries(df, num_entries=20):
     return result
 
 
-# Datei laden
-df = pd.read_csv(r"C:\Code Python\automation-with-sam2\labeling_project\alle_schaeden_gleichmaessige_liste.csv", sep=';')
+# # Datei laden
+# df = pd.read_csv(r"C:\Code Python\automation-with-sam2\labeling_project\alle_schaeden_gleichmaessige_liste.csv", sep=';')
 
-# Die Liste mit max. 20 Einträgen pro Schadenskürzel erstellen
-limited_entries = get_limited_damage_entries(df)
+# # Die Liste mit max. 20 Einträgen pro Schadenskürzel erstellen
+# limited_entries = get_limited_damage_entries(df)
 
-# Liste speichern oder weiterverarbeiten
-limited_entries.to_csv(r'C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv', index=False)
+# # Liste speichern oder weiterverarbeiten
+# limited_entries.to_csv(r'C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv', index=False)
+
+aus_reduzierter_liste_zu_gleichmaeßiger_liste()

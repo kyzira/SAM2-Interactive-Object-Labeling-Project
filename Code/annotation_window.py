@@ -59,23 +59,16 @@ class AnnotationWindow:
 
     def update_mask(frame_number):
         if self.points and self.labels:
-            points_np = np.array(self.points, dtype=np.float32)
-            labels_np = np.array(self.labels, dtype=np.float32)
 
-            _, out_obj_ids, out_mask_logits = predictor.add_new_points_or_box(
-                inference_state=self.inference_state,
-                frame_idx=frame_number,
-                obj_id=int(self.ann_obj_id),
-                points=points_np,
-                labels=labels_np,
-            )
+
+
             
             # Clear previous plot and update the mask
             ax.clear()
             ax.imshow(image_np, aspect='equal')  # Maintain aspect ratio
             ax.axis('off')  # Ensure axes are completely off
             show_points(points_np, labels_np, ax)
-            show_mask((out_mask_logits[0] > 0.0).cpu().numpy(), ax, obj_id=out_obj_ids[0])
+            show_mask(, ax, )
             canvas.draw()
         else:
             # If no points are left, clear the mask and show the original image
