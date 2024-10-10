@@ -41,7 +41,7 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
             return False
         else:
             start_frame = max(0, int(damage_frame - rewind_seconds * fps))
-            end_frame = min(total_frames, int(damage_frame - proceed_seconds * fps))
+            end_frame = min(total_frames, int(damage_frame + proceed_seconds * fps))
             print(f"Damage Second: {damage_second} Damage Frame: {damage_frame}")
 
 
