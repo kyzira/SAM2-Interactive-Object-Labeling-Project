@@ -6,8 +6,8 @@ def convert_video(input_path="", output_path="", start_frame=None, end_frame=Non
     if input_path == "":
         input_path = input("Video Path (without quotes): ").strip()
 
-    rewind_seconds = 40
-    proceed_seconds = 10
+    rewind_seconds = 45
+    proceed_seconds = 20
 
 
     # Split the input path to get the base name and create frame directory

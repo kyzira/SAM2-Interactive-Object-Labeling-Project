@@ -12,10 +12,10 @@ results_dir = os.path.join(output_dir, "results")
 os.makedirs(results_dir, exist_ok=True)
 
 index_path = os.path.join(output_dir, "current_index.txt")
-table_path = r"C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv"
+table_path = r"C:\Code Python\automation-with-sam2\Tabellen\beispiel_liste.csv"
 
 usecols = ["Videoname", "Videozeitpunkt (h:min:sec)", "Schadenskürzel", "Videopfad", "Schadensbeschreibung"]
-damage_table = pd.read_csv(table_path, usecols=usecols, delimiter=",")
+damage_table = pd.read_csv(table_path, usecols=usecols, delimiter=";")
 
 if os.path.exists(index_path):
     with open(index_path, "r") as index_file:
