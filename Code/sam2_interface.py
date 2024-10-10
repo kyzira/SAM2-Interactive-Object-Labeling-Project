@@ -973,7 +973,7 @@ class ImageDisplayApp(tk.Tk):
 
                 for contour in contours:
                     # Simplify the contour using approxPolyDP
-                    epsilon = 0.005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+                    epsilon = 0.0005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
                     simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
 
                     # Convert contour points to a list of tuples
