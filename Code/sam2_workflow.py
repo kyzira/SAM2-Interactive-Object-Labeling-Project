@@ -7,6 +7,7 @@ import frame_info_and_manipulation
 import os
 import threading
 from PIL import Image, ImageTk, ImageDraw
+from annotation_window import AnnotationWindow
 
 
 class ImageDisplayApp(tk.Tk):
@@ -487,17 +488,36 @@ class ImageDisplayApp(tk.Tk):
         """Handle mouse click events on the canvas."""
         x, y = event.x, event.y
 
+        print("clicked")
         cell_width , cell_height, grid_size = self.get_canvas_info()
 
         row = int(y // cell_height)
         col = int(x // cell_width)
 
+        start_index = int(self.image_slider.get())
+
+        # Calculate the index of the clicked image
+        index = row * grid_size + col + start_index
+
+        print(f"index {index}")
+        # Open the selected image in a new window and add points
+        self.open_annotation_window(index)
+
+    def open_annotation_window(self, img_index):
+
+        annotation_window = tk.Toplevel(self)
+        annotation_window.title(f"Punkte für {self.radio_var.get()} hinzufügen")
+        shown_frames = self.frame_info.get_frames()
+        annotation_window = AnnotationWindow(annotation_window, shown_frames[img_index], img_index)
+        self.wait_window(annotation_window)
+
+
     def run(self):
         """Start the Tkinter event loop."""
         self.initialized = True
         self.init_sam_with_selected_observation()
-        # self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
-        # self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
+        self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
+        self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
         
         self.state('zoomed')    
         self.update_idletasks()

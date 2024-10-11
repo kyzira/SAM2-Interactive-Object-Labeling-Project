@@ -213,7 +213,7 @@ class ImageDisplayApp(tk.Tk):
 
         # Create a new top-level window for annotation
         annotationWindow = AnnotationWindow(f"Punkte für {self.options[self.ann_obj_id]} hinzufügen")
-        annotationWindow.display_image(image)
+        #annotationWindow.display_image(image)
 
 
     def show_propagated_images(self):
