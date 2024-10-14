@@ -8,6 +8,8 @@ import os
 import threading
 from PIL import Image, ImageTk, ImageDraw
 from annotation_window import AnnotationWindow
+import cv2
+import numpy as np
 
 
 class ImageDisplayApp(tk.Tk):
@@ -29,8 +31,7 @@ class ImageDisplayApp(tk.Tk):
         self.stop_callback = stop_callback
 
         # Stores the observations
-        self.observations = observation_management.RadioButtonManagement()
-        self.observations.add_observation(schadens_kurzel)
+        self.observations = observation_management.RadioButtonManagement()     
 
         # Saves Frame information, like the names, filepaths and so on
         self.frame_info = frame_info_and_manipulation.FrameInfoStruct(frame_dir)
@@ -44,6 +45,12 @@ class ImageDisplayApp(tk.Tk):
         # Initializes the json storage file and reads it, if it exists
         json_path =  os.path.join(self.frame_info.working_dir, f"{str(os.path.basename(self.frame_info.working_dir))}.json")
         self.json = saving_dicts_and_json.JsonReadWrite(json_path)
+        
+        if not self.json.get_json():
+            self.observations.add_observation(schadens_kurzel)
+            self.json.prepare_json_with_frames(self.frame_info.get_frame_name_list(), self.observations.get_observation_list())
+        else:
+            self.check_json_for_observations()
 
 
 
@@ -53,72 +60,73 @@ class ImageDisplayApp(tk.Tk):
         
         # Frame for Radiobuttons and input field
         radio_frame = tk.Frame(self)
-        radio_frame.pack(side='top', fill='x', padx=10, pady=5)
+        radio_frame.pack(side="top", fill="x", padx=10, pady=5)
 
         # Add widgets in the radio_frame horizontally
-        tk.Label(radio_frame, text="Add option:").pack(side='left', padx=(0, 5))
+        tk.Label(radio_frame, text="Add option:").pack(side="left", padx=(0, 5))
         self.new_option_entry = tk.Entry(radio_frame, width=15)
-        self.new_option_entry.pack(side='left', padx=(0, 5))
+        self.new_option_entry.pack(side="left", padx=(0, 5))
 
         # Add button
         add_button = ttk.Button(radio_frame, text="Add", command=self.read_option_and_clear_entry_field)
-        add_button.pack(side='left', padx=(5, 0))
+        add_button.pack(side="left", padx=(5, 0))
 
         # Radiobuttons container
         self.radio_container = tk.Frame(radio_frame)
-        self.radio_container.pack(side='left', padx=10, pady=5)
+        self.radio_container.pack(side="left", padx=10, pady=5)
 
         self.wait_label = tk.Label(radio_frame, text="", font=("Helvetica", 16), fg="red")
         self.wait_label.pack(side="left", padx=10, pady=5)
 
         # Button to delete labeling
         self.more_images_forward = ttk.Button(radio_frame, text="delete unselected labels", command=self.delete_damage)
-        self.more_images_forward.pack(side='left', padx=(5, 5))
+        self.more_images_forward.pack(side="left", padx=(5, 5))
 
         # Button to skip to next label
         self.more_images_forward = ttk.Button(radio_frame, text="Next", command=self.destroy)
-        self.more_images_forward.pack(side='right', padx=(5, 5))
+        self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Button to stop labeling
         self.more_images_forward = ttk.Button(radio_frame, text="Cancel", command=self.stop_program)
-        self.more_images_forward.pack(side='right', padx=(5, 5))
+        self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Initialize canvas
-        self.canvas = tk.Canvas(self, width=1000, height=800, bg='white')
-        self.canvas.pack(fill='both', expand=True)
+        self.canvas = tk.Canvas(self, width=1000, height=800, bg="white")
+        self.canvas.pack(fill="both", expand=True)
 
         # Frame to hold the input field, button, and directory selection
         input_frame = tk.Frame(self)
-        input_frame.pack(side='top', fill='x', padx=10, pady=5)
+        input_frame.pack(side="top", fill="x", padx=10, pady=5)
 
         # Add Previous and Next buttons to navigate images
         self.prev_button = ttk.Button(input_frame, text="<", command=self.prev_images)
-        self.prev_button.pack(side='left', padx=(5, 0))
+        self.prev_button.pack(side="left", padx=(5, 0))
 
         self.next_button = ttk.Button(input_frame, text=">", command=self.next_images)
-        self.next_button.pack(side='left', padx=(5, 0))
+        self.next_button.pack(side="left", padx=(5, 0))
 
         # Short slider (10% of the window width)
-        self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient='horizontal', command=self.slider_update)
-        self.image_slider.pack(side='left', fill='x', expand=False, padx=(10, 5), ipadx=12)  # Adjust width with ipadx
+        self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient="horizontal", command=self.slider_update)
+        self.image_slider.pack(side="left", fill="x", expand=False, padx=(10, 5), ipadx=12)  # Adjust width with ipadx
 
         # Label
-        tk.Label(input_frame, text="Grid Size:").pack(side='left', padx=(0, 5))
+        tk.Label(input_frame, text="Grid Size:").pack(side="left", padx=(0, 5))
 
         # Entry field with specified width
         self.grid_entry = tk.Entry(input_frame, width=10)  # Set the width here
-        self.grid_entry.insert(0, '5')
-        self.grid_entry.pack(side='left', fill='x', expand=True, padx=(0, 5))
+        self.grid_entry.insert(0, "5")
+        self.grid_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
         # Button for updating grid
         self.button = ttk.Button(input_frame, text="Update Grid", command=self.reload_grid_and_images)
-        self.button.pack(side='left', padx=(5, 0))
+        self.button.pack(side="left", padx=(5, 0))
 
         self.more_images_back = ttk.Button(input_frame, text="extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
-        self.more_images_back.pack(side='left', padx=(5, 0))
+        self.more_images_back.pack(side="left", padx=(5, 0))
 
         self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
-        self.more_images_forward.pack(side='left', padx=(5, 0))
+        self.more_images_forward.pack(side="left", padx=(5, 0))
+
 
 
 
@@ -151,7 +159,7 @@ class ImageDisplayApp(tk.Tk):
     def read_option_and_clear_entry_field(self):
         # Callback für den Button, um die neue Option hinzuzufügen.
         self.observations.add_observation(self.new_option_entry.get().strip())
-        self.new_option_entry.delete(0, 'end')
+        self.new_option_entry.delete(0, "end")
         self.update_observation_radiobuttons()
         # Hier 
 
@@ -164,6 +172,16 @@ class ImageDisplayApp(tk.Tk):
         else:
             self.ann_obj_id = 0
 
+
+    def check_json_for_observations(self):
+        json_data = self.json.get_json()
+        observation_list = self.observations.get_observation_list()
+        for frame in json_data.keys():
+            observation = json_data[frame]["Observations"]
+            for key in observation.keys():
+                if key not in observation_list:
+                    observation_list.append(key)
+                    self.observations.add_observation(key)
 
 
     def update_observation_radiobuttons(self):
@@ -192,10 +210,10 @@ class ImageDisplayApp(tk.Tk):
 
             # Create a frame for each radio button and checkbox
             frame = tk.Frame(self.radio_container)
-            frame.pack(side='left', padx=5)
+            frame.pack(side="left", padx=5)
 
             # Create the radio button
-            rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg='white', command=self.radio_button_value_changed)
+            rb = tk.Radiobutton(frame, text=option, variable=self.radio_var, value=option, bg="white", command=self.radio_button_value_changed)
             rb.pack()
 
             # Create a Checkbutton below each Radiobutton
@@ -221,7 +239,9 @@ class ImageDisplayApp(tk.Tk):
 
         self.observations.remove_observations(to_delete_list)
         self.json.remove_damages_from_json(to_delete_list)
+        self.json.load_json_from_file()
         self.update_observation_radiobuttons()
+        self.reload_grid_and_images()
 
 
 
@@ -264,33 +284,30 @@ class ImageDisplayApp(tk.Tk):
 
     def get_points_for_selected_observations(self):
         points_dict = dict()
-        json_data = self.json.load_json_from_file()
+        json_data = self.json.get_json()
         sel_observation = self.radio_var.get()
 
         if json_data:
             for frame_number, frame_data in json_data.items():
                 frame_name = frame_data["File Name"]
                 if "Observations" in frame_data:
-                    Observations = frame_data['Observations']
-                    if sel_observation in Observations:
-                        kuerzel_data = Observations[sel_observation]
+                    observations = frame_data["Observations"]
+                    if sel_observation in observations:
+                        kuerzel_data = observations[sel_observation]
                         
                         points_list = []
                         labels_list = []
-
-                        # Iteriere über die Indizes im Kürzel
-                        for damage_info in kuerzel_data.values():
                             
-                            if "Punkte" in damage_info:
-                                pos_punkte = damage_info['Punkte'].get('1', [])
-                                neg_punkte = damage_info['Punkte'].get('0', [])
-                                
-                                for punkt in pos_punkte:
-                                    points_list.append(punkt)
-                                    labels_list.append(1)
-                                for punkt in neg_punkte:
-                                    points_list.append(punkt)
-                                    labels_list.append(0)
+                        if "Punkte" in kuerzel_data:
+                            pos_punkte = kuerzel_data["Punkte"].get("1", [])
+                            neg_punkte = kuerzel_data["Punkte"].get("0", [])
+                            
+                            for punkt in pos_punkte:
+                                points_list.append(punkt)
+                                labels_list.append(1)
+                            for punkt in neg_punkte:
+                                points_list.append(punkt)
+                                labels_list.append(0)
 
                         frame_list = self.frame_info.get_frame_name_list()
                         img_index = frame_list.index(frame_name)
@@ -343,11 +360,14 @@ class ImageDisplayApp(tk.Tk):
 
 
 
-    def show_selected_images(self, start_index):
+    def show_selected_images(self, start_index = None):
         """Displays images in a grid format on the canvas."""
         if not self.initialized:
             return
         
+        if not start_index:
+            start_index = self.image_slider.get()
+
         self.image_refs = []
 
 
@@ -357,7 +377,7 @@ class ImageDisplayApp(tk.Tk):
         self.canvas.delete("all")
         cell_width, cell_height, grid_size = self.get_canvas_info()
 
-        json_data = self.json.load_json_from_file()
+        json_data = self.json.get_json()
 
         for i in range(grid_size * grid_size):
             index = start_index + i
@@ -371,7 +391,8 @@ class ImageDisplayApp(tk.Tk):
             # Add mask if available
             if json_data:
                 for frame in json_data.values():
-                    if img_name in frame['File Name']:
+                    if img_name in frame["File Name"]:
+                        
                         masked_img = self.draw_mask_on_image(img, frame)
                         img = masked_img
 
@@ -403,55 +424,65 @@ class ImageDisplayApp(tk.Tk):
             (255, 0, 255, 100)  # Magenta with transparency
         ]
 
-
         observation_list = self.observations.get_observation_list()
 
         for kuerzel in observation_list:
             # Create a transparent overlay for polygons
-            overlay = Image.new('RGBA', img.size, (0, 0, 0, 0))
+            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
             overlay_draw = ImageDraw.Draw(overlay, "RGBA")
 
             if kuerzel in frame["Observations"]:
                 schaden_data = frame["Observations"][kuerzel]
 
-                for _, schaden_info in schaden_data.items():
+                if schaden_data.keys() is None:
+                    continue
+                # Check if "Maske" exists
+                if "Maske" in schaden_data:
+                    polygons = schaden_data["Maske"]
+                else:
+                    polygons = None
 
-                    polygons = schaden_info["Maske"]
-                    points = schaden_info["Punkte"]
-                    pos_points = points["1"]
-                    neg_points = points["0"]
+                # Check if "Punkte" exists
+                if "Punkte" in schaden_data:
+                    points = schaden_data["Punkte"]
+                    pos_points = points.get("1", [])
+                    neg_points = points.get("0", [])
+                else:
+                    pos_points = None
+                    neg_points = None
 
-                    observation_index = observation_list.index(kuerzel)
-                    color = colors[observation_index % len(colors)]
+                observation_index = observation_list.index(kuerzel)
+                color = colors[observation_index % len(colors)]
 
-                    if self.checkbox_vars[kuerzel].get():
-
+                if self.checkbox_vars[kuerzel].get():
+                    # Draw polygons
+                    if polygons:
                         for polygon in polygons:
                             polygon_tuples = [tuple(point) for point in polygon]
                             if len(polygon_tuples) > 3:
                                 overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
-                        # Draw positive points (green circles)
+                    # Draw positive points (green circles)
+                    if pos_points:
                         for point in pos_points:
                             x, y = point
                             radius = 5
                             overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(0, 255, 0, 255))
 
-                        # Draw negative points (red circles)
+                    # Draw negative points (red circles)
+                    if neg_points:
                         for point in neg_points:
                             x, y = point
                             radius = 5
                             overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 0, 0, 255))
 
-
             # Composite the overlay with the original image
-            if img.mode != 'RGBA':
-                img = img.convert('RGBA')
+            if img.mode != "RGBA":
+                img = img.convert("RGBA")
             img = Image.alpha_composite(img, overlay)
             img = img.convert("RGB")
 
         return img
-
 
 
     def slider_update(self, current_index):
@@ -501,10 +532,13 @@ class ImageDisplayApp(tk.Tk):
 
         print(f"index {index}")
         # Open the selected image in a new window and add points
-        self.open_annotation_window(index)
+        self.open_annotation_window_save_Coordinates(index)
+
+        self.track_object()
+        self.reload_grid_and_images()
 
 
-    def open_annotation_window(self, img_index):
+    def open_annotation_window_save_Coordinates(self, img_index):
         annotation_window = tk.Toplevel(self)
         annotation_window.title(f"Punkte für {self.radio_var.get()} hinzufügen")
         shown_frames = self.frame_info.get_frames()
@@ -513,10 +547,73 @@ class ImageDisplayApp(tk.Tk):
         self.wait_window(annotation_window)
         print("window closed")
 
-        points, labels = window.get_points_and_labels()
-    
-        print(points)
-        print(labels)
+
+        # Save Coordinates
+        points, labels, polygons = window.get_points_and_labels()
+
+
+        self.add_info_to_json(img_index, polygons, points, labels)
+        
+
+    def add_info_to_json(self, img_index, polygons, points = None, labels = None, label_index = None):
+        pos_punkte = []
+        neg_punkte = []
+
+        if points is not None:
+            for coordinates, label in zip(points, labels):
+                if label == 1:
+                    pos_punkte.append(coordinates)
+                elif label == 0:
+                    neg_punkte.append(coordinates)
+
+        all_frames = self.frame_info.get_frame_name_list()
+        frame_name = all_frames[img_index]
+        damage = self.radio_var.get()
+
+
+        if points is not None:
+            self.json.add_frame_to_json(frame_name=frame_name,
+                                        damage=damage,
+                                        polygon=polygons,
+                                        pos_punkte=pos_punkte,
+                                        neg_punkte=neg_punkte,
+                                        index=label_index)
+        else:
+            self.json.add_frame_to_json(frame_name=frame_name,
+                                        damage=damage,
+                                        polygon=polygons)
+
+
+
+    def track_object(self):
+        video_segments = self.sam_model.propagate_in_video()
+
+        for out_frame_idx, masks in video_segments.items():
+            
+            mask_data = []
+
+            for out_obj_id, out_mask in masks.items():
+                # Remove singleton dimensions
+                out_mask = np.squeeze(out_mask)  # Squeeze to remove dimensions of size 1
+                
+                # Extract contours using OpenCV
+                contours, _ = cv2.findContours(out_mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                for contour in contours:
+                    # Simplify the contour using approxPolyDP
+                    epsilon = 0.0005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+                    simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
+
+                    # Convert contour points to a list of tuples
+                    simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
+                    
+                    mask_data.append(simplified_contour)
+
+            self.add_info_to_json(out_frame_idx, mask_data)
+        
+        self.json.save_json_to_file()
+
+
 
 
 
@@ -527,7 +624,7 @@ class ImageDisplayApp(tk.Tk):
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
         self.canvas.bind("<Button-3>", self.on_canvas_click)  # Bind right click to canvas
         
-        self.state('zoomed')    
+        self.state("zoomed")    
         self.update_idletasks()
         self.update()
         self.reload_grid_and_images()

@@ -11,6 +11,7 @@ class AnnotationWindow:
 
         self.points = []
         self.labels = []
+        self.polygons = []
 
         self.sam2 = sam2_class
         self.ann_obj_id = ann_obj_id
@@ -159,8 +160,8 @@ class AnnotationWindow:
     def __create_propagated_image(self):
         if self.points:
             mask = self.__propagate_image()  # Get the mask from your existing propagate method
-            polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
-            propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), polygons)  # Draw the polygons on the original image
+            self.polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
+            propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)  # Draw the polygons on the original image
             return propagated_image
         else:
             return self.original_image
@@ -212,4 +213,4 @@ class AnnotationWindow:
     
 
     def get_points_and_labels(self):
-        return self.points, self.labels
+        return self.points, self.labels, self.polygons
