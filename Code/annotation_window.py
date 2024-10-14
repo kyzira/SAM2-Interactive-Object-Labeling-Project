@@ -3,31 +3,37 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
-
+import cv2
 
 class AnnotationWindow:
-    def __init__(self, annotation_window, img, index):
+    def __init__(self, annotation_window, img, img_index, ann_obj_id, sam2_class):
         self.annotation_window = annotation_window
 
         self.points = []
         self.labels = []
 
+        self.sam2 = sam2_class
+        self.ann_obj_id = ann_obj_id
+
         # Store the original image
         self.original_image = img
+        
         # Store the shown image
         self.image = img
         
+        self.resized_width = None
+        self.resized_height = None
+
         # Create a canvas
         self.canvas = tk.Canvas(self.annotation_window)
         self.annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
         self.canvas.pack()
 
-        self.img_imdex = index
+        self.img_index = img_index
 
         # Display the image on the canvas
         self.image_id = None
         self.__display_image(self.image)
-
 
         # Change image width when resizing
         self.annotation_window.bind('<Configure>', self.__on_resize)
@@ -50,12 +56,54 @@ class AnnotationWindow:
         
         self.canvas.config(width=new_width, height=new_height)
 
-        # Resize the image to fit the new window size
-        resized_image = self.image.resize((new_width, new_height), Image.LANCZOS)
+        resized_image = self.original_image.resize((new_width, new_height), Image.LANCZOS)
         self.tk_image = ImageTk.PhotoImage(resized_image)
 
         # Update the image on the canvas
-        self.canvas.itemconfig(self.image_id, image=self.tk_image)
+        if self.image_id is not None:
+            self.canvas.delete(self.image_id)
+        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+
+        self.resized_width = new_width
+        self.resized_height = new_height
+        # Redraw points on the resized image
+        self.__display_image(self.image)
+
+
+    def __display_image(self, image):
+        # Create a new image to draw points on
+        
+        if self.resized_width and self.resized_height:
+            img_with_points = image.resize((self.resized_width, self.resized_height), Image.LANCZOS)
+        else:
+            img_with_points = image.copy()
+
+        draw = ImageDraw.Draw(img_with_points)
+
+        # Loop through points and draw them based on the new size
+        original_width, original_height = self.original_image.size
+        for point, label in zip(self.points, self.labels):
+            color = (0, 255, 0) if label == 1 else (255, 0, 0)  # Green for 1, Red for 0
+            x, y = point
+            
+            # Scale points to the resized image dimensions
+            scaled_x = int(self.resized_width * (x / original_width))
+            scaled_y = int(self.resized_height * (y / original_height))
+            
+            # Draw a circle at the scaled point
+            radius = 5  # Size of the circle
+            draw.ellipse([(scaled_x - radius, scaled_y - radius), (scaled_x + radius, scaled_y + radius)], fill=color)
+
+        # Create a new PhotoImage to display
+        self.tk_image = ImageTk.PhotoImage(img_with_points)
+        
+        # If there's an existing image, delete it before displaying the new one
+        if self.image_id is not None:
+            self.canvas.delete(self.image_id)
+
+        # Create a new image on the canvas
+        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+
 
 
     def __on_close(self):
@@ -76,20 +124,20 @@ class AnnotationWindow:
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         # actual image size
-        image_width, image_height = self.image.size
-
+        image_width, image_height = self.original_image.size
 
         # Clicked Coordinates in relation to actual image pixels
-        image_x = int(image_width * (x/canvas_width))
-        image_y = int(image_height * (y/canvas_height))
+        image_x = int(image_width * (x / canvas_width))
+        image_y = int(image_height * (y / canvas_height))
 
         self.points.append([image_x, image_y])
 
         # Print or log the button and coordinates
         print(f"Label {self.labels[-1]} at ({image_x}, {image_y})")
 
-        # self.__create_propagated_image()
+        self.image = self.__create_propagated_image()
         self.__display_image(self.image)
+
 
     def __on_key_press(self, event):
         if event.keysym == "BackSpace":
@@ -97,80 +145,71 @@ class AnnotationWindow:
                 print(f"Removed last point: {self.points[-1]} with label {self.labels[-1]}")
                 self.points.pop()
                 self.labels.pop()
-                # self.__create_propagated_image()
+
+                self.image = self.__create_propagated_image()
                 self.__display_image(self.image)
+
             else:
                 # Clear the mask and show the original image if no points are left
                 self.__display_image(self.original_image)
 
 
-    def __display_image(self, img):
-        # Create a new image to draw points on
-        img_with_points = img.copy()
-        draw = ImageDraw.Draw(img_with_points)
 
-        # Loop through points and draw them
-        for point, label in zip(self.points, self.labels):
-            color = (0, 255, 0) if label == 1 else (255, 0, 0)  # Green for 1, Red for 0
-            x, y = point
-            
-            # Draw a circle at the point
-            radius = 5  # Size of the circle
-            draw.ellipse([(x - radius, y - radius), (x + radius, y + radius)], fill=color)
 
-        # Create a new PhotoImage to display
-        self.tk_image = ImageTk.PhotoImage(img_with_points)
-        
-        # If there's an existing image, delete it before displaying the new one
-        if self.image_id is not None:
-            self.canvas.delete(self.image_id)
-
-        # Create a new image on the canvas
-        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+    def __create_propagated_image(self):
+        if self.points:
+            mask = self.__propagate_image()  # Get the mask from your existing propagate method
+            polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
+            propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), polygons)  # Draw the polygons on the original image
+            return propagated_image
+        else:
+            return self.original_image
 
 
     def __propagate_image(self):
-        print("Propagating image...")  # Add your logic here
+        mask, _ = self.sam2.add_point_return_mask(self.points, self.labels, self.img_index, self.ann_obj_id)
+        return mask
 
 
-    # def update_mask(frame_number):
-    #     if self.points and self.labels:
-    #         # Clear previous plot and update the mask
-    #         ax.clear()
-    #         ax.imshow(image_np, aspect='equal')  # Maintain aspect ratio
-    #         ax.axis('off')  # Ensure axes are completely off
-    #         show_points(points_np, labels_np, ax)
-    #         show_mask(, ax, )
-    #         canvas.draw()
-    #     else:
-    #         # If no points are left, clear the mask and show the original image
-    #         ax.clear()
-    #         ax.imshow(image_np, aspect='equal')
-    #         ax.axis('off')
-    #         canvas.draw()
+    def __convert_mask_to_polygons(self, mask):
+        # Initialize a list to hold all mask data
+        mask_data = []
+
+        # Remove singleton dimensions
+        mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1
+
+        # Extract contours using OpenCV
+        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for contour in contours:
+            # Simplify the contour using approxPolyDP
+            epsilon = 0.0001 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+            simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
+
+            # Convert contour points to a list of tuples
+            simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
+            
+            mask_data.append(simplified_contour)
+
+        return mask_data
 
 
-    # def show_mask(mask, ax, obj_id=None, random_color=False):
-    #     if random_color:
-    #         color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    #     else:
-    #         cmap = plt.get_cmap("tab10")
-    #         cmap_idx = 0 if obj_id is None else obj_id
-    #         color = np.array([*cmap(cmap_idx)[:3], 0.6])
-    #     h, w = mask.shape[-2:]
-    #     mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    #     ax.imshow(mask_image, alpha=0.5)
+    def __draw_polygons_on_image(self, image, polygons, color=(255, 0, 0, 100)):  # Default color is semi-transparent red
+        overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))  # Create an empty overlay
 
+        overlay_draw = ImageDraw.Draw(overlay)
 
-    # def show_points(coords, labels, ax, marker_size=200):
-    #     pos_points = coords[labels == 1]
-    #     neg_points = coords[labels == 0]
-    #     ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-    #     ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
+        for polygon in polygons:
+            polygon_tuples = [tuple(point) for point in polygon]
+            if len(polygon_tuples) > 3:  # Ensure there are enough points to form a polygon
+                overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
+        # Composite the overlay with the original image
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        image = Image.alpha_composite(image, overlay)
+        return image.convert("RGB")  # Return a standard RGB image
+    
 
-    # def on_close():
-    #     self.wait_label.config(text="")
-    #     self.frame_for_point = frame_number
-    #     annotation_window.destroy()
-    #     self.show_propagated_images()
+    def get_points_and_labels(self):
+        return self.points, self.labels

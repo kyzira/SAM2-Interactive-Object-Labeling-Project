@@ -505,13 +505,19 @@ class ImageDisplayApp(tk.Tk):
 
 
     def open_annotation_window(self, img_index):
-
         annotation_window = tk.Toplevel(self)
         annotation_window.title(f"Punkte für {self.radio_var.get()} hinzufügen")
         shown_frames = self.frame_info.get_frames()
-        
-        AnnotationWindow(annotation_window, shown_frames[img_index], img_index)
+
+        window = AnnotationWindow(annotation_window, shown_frames[img_index], img_index, self.ann_obj_id, self.sam_model)
         self.wait_window(annotation_window)
+        print("window closed")
+
+        points, labels = window.get_points_and_labels()
+    
+        print(points)
+        print(labels)
+
 
 
     def run(self):
