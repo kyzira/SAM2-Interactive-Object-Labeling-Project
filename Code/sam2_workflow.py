@@ -503,12 +503,14 @@ class ImageDisplayApp(tk.Tk):
         # Open the selected image in a new window and add points
         self.open_annotation_window(index)
 
+
     def open_annotation_window(self, img_index):
 
         annotation_window = tk.Toplevel(self)
         annotation_window.title(f"Punkte für {self.radio_var.get()} hinzufügen")
         shown_frames = self.frame_info.get_frames()
-        annotation_window = AnnotationWindow(annotation_window, shown_frames[img_index], img_index)
+        
+        AnnotationWindow(annotation_window, shown_frames[img_index], img_index)
         self.wait_window(annotation_window)
 
 
