@@ -6,21 +6,26 @@ from PIL import Image, ImageTk, ImageDraw
 import cv2
 
 class AnnotationWindow:
-    def __init__(self, annotation_window, img, img_index, ann_obj_id, sam2_class):
+    def __init__(self, annotation_window, img, img_index, object_class_id, sam2):
+        if not annotation_window:
+            print("Error: annotation window is not set")
+            return
+
+        # ToDo: check other parameters for validity
+        
         self.annotation_window = annotation_window
 
         self.points = []
         self.labels = []
         self.polygons = []
 
-        self.sam2 = sam2_class
-        self.ann_obj_id = ann_obj_id
-
-        # Store the original image
-        self.original_image = img
+        self.sam2 = sam2
+        self.object_class_id = object_class_id
+        self.img_index = img_index
+        self.original_image = img  # Store the original image
         
         # Store the shown image
-        self.image = img
+        self.image = img.copy()
         
         self.resized_width = None
         self.resized_height = None
@@ -30,10 +35,8 @@ class AnnotationWindow:
         self.annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
         self.canvas.pack()
 
-        self.img_index = img_index
-
         # Display the image on the canvas
-        self.image_id = None
+        self.image_id = None # ToDo: change to image_exists = False
         self.__display_image(self.image)
 
         # Change image width when resizing
@@ -49,6 +52,8 @@ class AnnotationWindow:
         # Add a protocol to handle window close
         self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
 
+    def get_points_and_labels(self):
+        return self.points, self.labels, self.polygons
 
     def __on_resize(self, event):
         # Update canvas size to match window size
@@ -105,18 +110,14 @@ class AnnotationWindow:
         # Create a new image on the canvas
         self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
 
-
-
     def __on_close(self):
         # This function is called when the annotation window is closed
         self.annotation_window.destroy()
 
-
     def __on_click(self, event):
-        # Determine which mouse button was clicked
-        if event.num == 1:
+        if event.num == 1: # left click
             self.labels.append(1)
-        elif event.num == 3:
+        elif event.num == 3: # right click
             self.labels.append(0)
         
         # Get the coordinates of the click
@@ -139,7 +140,6 @@ class AnnotationWindow:
         self.image = self.__create_propagated_image()
         self.__display_image(self.image)
 
-
     def __on_key_press(self, event):
         if event.keysym == "BackSpace":
             if self.points:
@@ -154,27 +154,33 @@ class AnnotationWindow:
                 # Clear the mask and show the original image if no points are left
                 self.__display_image(self.original_image)
 
-
-
-
     def __create_propagated_image(self):
-        if self.points:
-            mask = self.__propagate_image()  # Get the mask from your existing propagate method
-            self.polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
-            propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)  # Draw the polygons on the original image
-            return propagated_image
-        else:
+        if not self.points or not len(self.points):
             return self.original_image
-
+        
+        mask = self.__propagate_image()  # Get the mask from your existing propagate method
+        self.polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
+        propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)  # Draw the polygons on the original image
+        return propagated_image
 
     def __propagate_image(self):
-        mask, _ = self.sam2.add_point_return_mask(self.points, self.labels, self.img_index, self.ann_obj_id)
+        points_labels_and_frame_index = {
+            "Punkte" : self.points,
+            "Labels" : self.labels,
+            "Image Index" : self.img_index
+        }
+
+        mask = self.sam2.add_point(points_labels_and_frame_index, self.object_class_id)
+
+        if len(mask) == 0:
+            print("Error: Mask length == 0")
+
         return mask
 
 
     def __convert_mask_to_polygons(self, mask):
         # Initialize a list to hold all mask data
-        mask_data = []
+        polygons = []
 
         # Remove singleton dimensions
         mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1
@@ -189,10 +195,12 @@ class AnnotationWindow:
 
             # Convert contour points to a list of tuples
             simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
-            
-            mask_data.append(simplified_contour)
+            if len(simplified_contour) < 3:
+                print(f"Invalid polygon with only {len(simplified_contour)} points")
+            else:
+                polygons.append(simplified_contour)
 
-        return mask_data
+        return polygons
 
 
     def __draw_polygons_on_image(self, image, polygons, color=(255, 0, 0, 100)):  # Default color is semi-transparent red
@@ -204,13 +212,11 @@ class AnnotationWindow:
             polygon_tuples = [tuple(point) for point in polygon]
             if len(polygon_tuples) > 3:  # Ensure there are enough points to form a polygon
                 overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
+            else:
+                print(f"Invalid polygon with only {len(polygon_tuples)} points")
 
         # Composite the overlay with the original image
         if image.mode != 'RGBA':
             image = image.convert('RGBA')
         image = Image.alpha_composite(image, overlay)
         return image.convert("RGB")  # Return a standard RGB image
-    
-
-    def get_points_and_labels(self):
-        return self.points, self.labels, self.polygons
