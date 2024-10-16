@@ -1,17 +1,54 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import tkinter as tk
 from PIL import Image, ImageTk, ImageDraw
 import cv2
 
 class AnnotationWindow:
-    def __init__(self, annotation_window, img, img_index, object_class_id, sam2):
+    """
+        This Class handles displaying and interacting with the Annotation Window.
+        In this Window the given Image will be shown, and if masks are provided from SAM, these will be drawn on top of the image.
+        When clicked on the image the Coordinates of the click and wether it was a right or left click are stored, and forwarded to sam. Sam will then provide a mask, which is drawn on top of the image.
+        
+        Workflow:
+            - Left Click
+                Adds a positive Point to the clicked coordinates. A positive Point dictates to SAM that the Object you want to track is in the clicked position
+            - Right Click
+                Adds a negative Point to the clicked coordinates. A negative Point dictates to SAM that the Object you want to track is definetly not in the clicked position
+            - Backspace Key
+                Removes last added Point
+            - Close Window
+                Finishes the annotation process.
+            - get_points_and_labels:
+                This method can be called from outside this module. It will return a list of the clicked coordinates, a list wether those clicks were positive or negative points and the polygons for the current image.
+                These lists can then be used to track the object throughout the whole video.
+    """
+
+    def __init__(self, annotation_window: tk.Toplevel, img: Image, img_index: int, object_class_id: int, sam2):
+        """
+            annotation_window:
+                This is a tkinter window class. it is used to add a canvas to it and display the image and register where on it it was clicked.
+            img:
+                This is the image to be displayed, opened as a PIL.Image
+            img_index:
+                This is the Index of the Image in relation to SAMs Images. For example, if this is the 2. Image which is displayed in sam, then the Index will be 2
+            Object_class_id:
+                This is the ID belonging to the to be tracked object
+        """
         if not annotation_window:
             print("Error: annotation window is not set")
             return
-
-        # ToDo: check other parameters for validity
+        if not img:
+            print("Error: Image not set")
+            return
+        if img_index == None:
+            print("Error: Image Index not set")
+            return
+        if object_class_id == None:
+            print("Error: Object Class ID not set")
+            return    
+        if not sam2:
+            print("Error: SAM not set")   
         
         self.annotation_window = annotation_window
 
@@ -78,7 +115,6 @@ class AnnotationWindow:
 
     def __display_image(self, image):
         # Create a new image to draw points on
-        
         if self.resized_width and self.resized_height:
             img_with_points = image.resize((self.resized_width, self.resized_height), Image.LANCZOS)
         else:
@@ -134,13 +170,11 @@ class AnnotationWindow:
 
         self.points.append([image_x, image_y])
 
-        # Print or log the button and coordinates
-        print(f"Label {self.labels[-1]} at ({image_x}, {image_y})")
-
         self.image = self.__create_propagated_image()
         self.__display_image(self.image)
 
     def __on_key_press(self, event):
+        # Remove last added Point
         if event.keysym == "BackSpace":
             if self.points:
                 print(f"Removed last point: {self.points[-1]} with label {self.labels[-1]}")
@@ -155,6 +189,7 @@ class AnnotationWindow:
                 self.__display_image(self.original_image)
 
     def __create_propagated_image(self):
+        # Give the list of clicked points to Sam, get a mask back, convert the mask into polygons and then draw them
         if not self.points or not len(self.points):
             return self.original_image
         
@@ -164,8 +199,9 @@ class AnnotationWindow:
         return propagated_image
 
     def __propagate_image(self):
+        # Prepare the structure and then send to sam
         points_labels_and_frame_index = {
-            "Punkte" : self.points,
+            "Points" : self.points,
             "Labels" : self.labels,
             "Image Index" : self.img_index
         }
@@ -195,9 +231,7 @@ class AnnotationWindow:
 
             # Convert contour points to a list of tuples
             simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
-            if len(simplified_contour) < 3:
-                print(f"Invalid polygon with only {len(simplified_contour)} points")
-            else:
+            if len(simplified_contour) > 2:
                 polygons.append(simplified_contour)
 
         return polygons

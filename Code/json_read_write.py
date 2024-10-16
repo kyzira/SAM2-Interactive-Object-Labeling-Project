@@ -5,14 +5,13 @@ import os
 class JsonReadWrite:
     def __init__(self, json_path):
         self.__json_data = dict()
-        # ToDo: if self.json_path.parent_dir_exists():
         self.json_path = json_path
         self.load_json_from_file()
 
     def get_json(self):
         return self.__json_data
         
-    def add_frame_to_json(self, frame_name: str, observation: str, polygons = None, pos_points = None, neg_points = None, sequence_index = None):
+    def add_frame_to_json(self, frame_name: str, observation: str, polygons = None, pos_points = None, neg_points = None, selection_order = None):
         """
             This function adds an element to the dictionairy which will be saved as a json.
             Depending on which parameters are given the json structure will be created.
@@ -41,10 +40,11 @@ class JsonReadWrite:
                             ]   # polygons
                     - pos_points/neg_points:
                         Both are lists of coordinates. They dont form a polygon, but instead just list where a positive/negative point was placed
-                    - sequence_index:
+                    - selection_order:
                         This is an integer with the index, in which order this frame was labeled. This index is only given if the points were set manually.
             
         """
+
         if frame_name == "" or observation == "":
             print("Error: Frame Name or Observation not set!")
 
@@ -63,7 +63,11 @@ class JsonReadWrite:
         coordinates_dict = self.__json_data[frame_num]["Observations"][observation]
 
         if polygons:
-            coordinates_dict["Maske"] = polygons
+            coordinates_dict["Mask Polygon"] = polygons
+
+        if selection_order == 0:
+            selection_order = self.__check_for_selection_order(observation)
+            coordinates_dict["Selection Order"] = selection_order
 
         if pos_points or neg_points:
             coordinates_dict["Points"] = dict()
@@ -72,25 +76,31 @@ class JsonReadWrite:
         if neg_points:
             coordinates_dict["Points"]["0"] = neg_points
 
-        if sequence_index:
-            coordinates_dict["Selection Order"] = sequence_index
-
-        if (pos_points or neg_points) and not sequence_index:
+        
+        if (pos_points or neg_points) and not selection_order:
             print("Index is not set despite pos_points or neg_points is set")
 
     def prepare_json_with_frames(self, frame_name_list, damage_list):
-        """
-            This function prepares the json with the given frames and damages
-        """
+        # This function prepares the json with the given frames and damages
+        if len(frame_name_list) < 1:
+            print("Error: Frame List empty")
+        if len(damage_list) < 1:
+            print("Error: Damage List empty")
+
         for frame_name in frame_name_list:
             for damage_name in damage_list:
                 self.add_frame_to_json(frame_name=frame_name, observation=damage_name)
         self.save_json_to_file()
 
     def remove_damages_from_json(self, damage_list):
-        # delete all entries from json
+        # delete all entries of the given damages from json
+        if len(damage_list) < 1:
+            print("Error: No Damages to be deleted")
+        
         for damage in damage_list:
             for frame in self.__json_data:
+                if "Observations" not in frame:
+                    continue
                 if damage in self.__json_data[frame]["Observations"]:
                     del self.__json_data[frame]["Observations"][damage]
         self.save_json_to_file()
@@ -110,3 +120,17 @@ class JsonReadWrite:
             print("Error: file does not exist! Creating emtpy .json")
             self.__json_data = dict()
             self.save_json_to_file()
+
+
+    def __check_for_selection_order(self, observation):
+        # Check the Json, how many frames already were labeled manually
+        counter = 0
+        for frame in self.__json_data.values():
+            if "Observations" not in frame:
+                continue
+            if observation not in frame["Observations"]:
+                continue
+            if "Selection Order" not in frame["Observations"][observation]:
+                continue
+            counter += 1
+        return counter

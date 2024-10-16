@@ -2,6 +2,25 @@ import os
 import cv2
 
 def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, end_frame=None, frame_rate=1):
+    """
+    Extracts frames from a video file.
+
+    This function takes the video located at 'input_path' and saves individual frames to 'output_path'. 
+    Frames are extracted from 'start_frame' up to 'end_frame' with a specified 'frame_rate'. 
+    If no 'end_frame' is provided, it defaults to the total number of frames in the video. 
+    If 'output_path' is empty, the frames are saved in a directory with the same name as the video file.
+    
+    Args:
+        input_path (str): The path to the input video file.
+        output_path (str): The directory where the extracted frames will be saved.
+        start_frame (int): The starting frame for extraction (default is 0).
+        end_frame (int): The last frame to extract (default is the last frame of the video).
+        frame_rate (int): The interval between frames to be extracted (default is 1, i.e., every frame).
+    
+    Returns:
+        bool: True if the extraction is successful, False otherwise.
+    """
+
     if input_path == "":
         print("Error: Input path is empty!")
         return False
@@ -52,6 +71,25 @@ def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, en
 
 
 def extract_frames_by_damage_time(input_path: str, output_path: str, damage_second=None, rewind_seconds=40, proceed_seconds=10, frame_rate=1):
+    """
+    Extracts frames surrounding a specified timestamp (damage second) in a video.
+
+    This function extracts frames from the video at 'input_path' based on a given 'damage_second' timestamp. 
+    It rewinds by 'rewind_seconds' before the damage second and proceeds for 'proceed_seconds' after. 
+    Frames are saved to 'output_path', or to a directory with the same name as the video file if 'output_path' is empty. 
+    Frames are extracted at the interval specified by 'frame_rate'.
+    
+    Args:
+        input_path (str): The path to the input video file.
+        output_path (str): The directory where the extracted frames will be saved.
+        damage_second (int): The timestamp of the event (in seconds) around which frames will be extracted.
+        rewind_seconds (int): The number of seconds to rewind before 'damage_second' (default is 40).
+        proceed_seconds (int): The number of seconds to extract after 'damage_second' (default is 10).
+        frame_rate (int): The interval between frames to be extracted (default is 1, i.e., every frame).
+    
+    Returns:
+        bool: True if the extraction is successful, False otherwise.
+    """
     if input_path == "":
         print("Error: Input path is empty!")
         return

@@ -7,6 +7,7 @@ class Sam:
         # Initialize the predictor as needed
         sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
         model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+
         self.frame_dir = frame_dir
         torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
         self.initialized = False
@@ -28,7 +29,6 @@ class Sam:
         """
         try:
             self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
-            print("SAM INITIALIZED")
             self.initialized = True
         except Exception as e:
             print(f"Error: Initializing failed: {e}")
@@ -72,7 +72,7 @@ class Sam:
             print("Error: Sam not initialized correctly")
             return
         
-        points = points_labels_and_frame_index["Punkte"]
+        points = points_labels_and_frame_index["Points"]
         labels = points_labels_and_frame_index["Labels"]
         frame_index = points_labels_and_frame_index["Image Index"]
         
@@ -98,7 +98,8 @@ class Sam:
         return mask
 
     def propagate_in_video(self):
-        # ToDo: check if predictor is successfully initialized and if any points are added
+        if self.initialized == False:
+            print("Error: Sam not Initialized!")
 
         video_segments = dict()
 
