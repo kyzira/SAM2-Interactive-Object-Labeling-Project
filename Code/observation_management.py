@@ -3,8 +3,16 @@ class RadioButtonManagement:
         self.__observation_list = []
 
     def add_observation(self, observation):
-        if observation and observation not in self.__observation_list:
-            self.__observation_list.append(observation)      
+        if observation:
+            counter = 0
+            new_observation = f"{observation} {counter}"
+
+            while new_observation in self.__observation_list:
+                counter += 1
+                new_observation = f"{observation} {counter}" 
+
+            if observation not in self.__observation_list:
+                self.__observation_list.append(new_observation)      
 
     def remove_observations(self, observation_list):
         for observation in observation_list:

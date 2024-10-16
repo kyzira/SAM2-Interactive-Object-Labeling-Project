@@ -8,7 +8,6 @@ import json
 # Configurable options for processing video frames
 auto_labeling = False     # Automatically apply YOLO model for damage labeling
 test_mode = True          # If True, a test case is run
-file_creation = False     # Only in test mode: If True, frames will be extracted and JSON files created
 frame_rate = 25           # Frame extraction rate in frames per second (fps)
 
 stop_flag = False         # Global flag to stop the process if required
@@ -66,7 +65,11 @@ def create_json_with_info(current_frame_dir: str, video_name: str, frame_rate: i
     """
     dir_path = os.path.dirname(current_frame_dir)
     json_path = os.path.join(dir_path, f"{str(os.path.basename(dir_path))}.json")
-    json_file = dict()
+    if os.path.exists(json_path):
+        with open(json_path, "r") as file:
+            json_file =  json.load(file)
+    else:
+        json_file = dict()
     info_name = f"Info {observation}, at {time_stamp}"
     json_file[info_name] = {
         "Video Name": video_name,
@@ -91,21 +94,21 @@ if test_mode:
     current_frame_dir = "C:\\Code Python\\automation-with-sam2\\labeling_project\\test folder\\source images"
     video_path = r"C:\Code Python\automation-with-sam2\labeling_project\test folder\test.mp4"
 
-    if file_creation == True:
-        extraction_succesful = extract_frames_by_frame(input_path=video_path, 
-                                                        output_path=current_frame_dir, 
-                                                        frame_rate = frame_rate,
-                                                        start_frame=400,
-                                                        end_frame=2000)
-        
-        # Create Json with arbitrary test numbers
-        create_json_with_info(current_frame_dir=current_frame_dir, 
-                            video_name=os.path.basename(video_path),
-                            frame_rate=frame_rate,
-                            time_stamp="00:00:20",
-                            observation=schadens_kurzel,
-                            video_path=video_path,
-                            video_hash = 00000)
+
+    extraction_succesful = extract_frames_by_frame(input_path=video_path, 
+                                                    output_path=current_frame_dir, 
+                                                    frame_rate = frame_rate,
+                                                    start_frame=400,
+                                                    end_frame=2000)
+    
+    # Create Json with arbitrary test numbers
+    create_json_with_info(current_frame_dir=current_frame_dir, 
+                        video_name=os.path.basename(video_path),
+                        frame_rate=frame_rate,
+                        time_stamp="00:00:20",
+                        observation=schadens_kurzel,
+                        video_path=video_path,
+                        video_hash = 00000)
 
     window_title = (schadens_kurzel)
     app = ImageDisplayWindow(

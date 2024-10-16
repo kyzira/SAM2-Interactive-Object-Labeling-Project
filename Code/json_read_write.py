@@ -96,13 +96,17 @@ class JsonReadWrite:
         # delete all entries of the given damages from json
         if len(damage_list) < 1:
             print("Error: No Damages to be deleted")
+            return  # Add return to avoid further execution when list is empty
         
         for damage in damage_list:
-            for frame in self.__json_data:
+            print(f"Now deleting {damage}")
+            for frame in self.__json_data.values():
                 if "Observations" not in frame:
                     continue
-                if damage in self.__json_data[frame]["Observations"]:
-                    del self.__json_data[frame]["Observations"][damage]
+                # Directly access frame instead of self.__json_data[frame]
+                if damage in frame["Observations"].keys():
+                    del frame["Observations"][damage]  # Modify the frame directly
+        print(f"Successfully Deleted: {damage_list}")
         self.save_json_to_file()
             
     def save_json_to_file(self):
@@ -120,6 +124,11 @@ class JsonReadWrite:
             print("Error: file does not exist! Creating emtpy .json")
             self.__json_data = dict()
             self.save_json_to_file()
+
+    def add_marked_frames_to_first_index(self, frames_list: list[str]):
+        first_key = next(iter(self.__json_data))
+        self.__json_data[first_key]["Marked Frames"] = frames_list
+        self.save_json_to_file()
 
 
     def __check_for_selection_order(self, observation):
