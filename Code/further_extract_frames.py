@@ -58,6 +58,7 @@ class LoadMoreFrames:
                 video_path (str): Path to the video file from which frames will be extracted.
                 num_of_extra_frames (int): The number of frames to extract backwards.
             """
+            self.__frame_rate, self.__first_frame, self.__last_frame = self.__detect_framerate_and_first_last_frame()
             if video_path == "":
                 print("Error: Video Path not valid!")
                 return
@@ -93,6 +94,7 @@ class LoadMoreFrames:
                 video_path (str): Path to the video file from which frames will be extracted.
                 num_of_extra_frames (int): The number of frames to extract forwards.
             """
+            self.__frame_rate, self.__first_frame, self.__last_frame = self.__detect_framerate_and_first_last_frame()
             if video_path == "":
                 print("Error: Video Path not valid!")
                 return

@@ -24,7 +24,7 @@ class AnnotationWindow:
                 These lists can then be used to track the object throughout the whole video.
     """
 
-    def __init__(self, annotation_window: tk.Toplevel, annotation_window_geomertry, img: Image, img_index: int, polygon_list, object_class_id: int, sam2):
+    def __init__(self, annotation_window: tk.Toplevel, annotation_window_geomertry, img: Image, img_index: int, polygon_list, object_class_id: int, sam2, color_index: int):
         """
             annotation_window:
                 This is a tkinter window class. it is used to add a canvas to it and display the image and register where on it it was clicked.
@@ -55,6 +55,8 @@ class AnnotationWindow:
         self.points = []
         self.labels = []
 
+        self.color_index = color_index
+
         if len(polygon_list)>0:
             print("Existing Polygons found!")
             self.polygons = polygon_list
@@ -77,18 +79,14 @@ class AnnotationWindow:
 
         # Create a canvas
         self.canvas = tk.Canvas(self.annotation_window)
-        
         if annotation_window_geomertry["Maximized"] == True:
             self.annotation_window.state("zoomed")
-
         elif annotation_window_geomertry["Geometry"]:
             annotation_window.geometry(annotation_window_geomertry["Geometry"])
-
         else:
             annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
 
         self.canvas.pack()
-
         # Display the image on the canvas
         self.image_id = None # ToDo: change to image_exists = False
 
@@ -99,14 +97,11 @@ class AnnotationWindow:
 
         # Change image width when resizing
         self.annotation_window.bind('<Configure>', self.__on_resize)
-
         # Bind mouse click and key press events 
         self.canvas.bind('<Button-1>', self.__on_click)  
         self.canvas.bind('<Button-3>', self.__on_click)
         self.canvas.bind('<Key>', self.__on_key_press)
-
         self.canvas.focus_set()
-
         # Add a protocol to handle window close
         self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
 
@@ -270,7 +265,16 @@ class AnnotationWindow:
         self.image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)
         self.__display_image(self.image)
 
-    def __draw_polygons_on_image(self, image, polygons, color=(255, 0, 0, 100)):  # Default color is semi-transparent red
+    def __draw_polygons_on_image(self, image, polygons):  # Default color is semi-transparent red
+        colors = [
+            (255, 0, 0, 100),   # Red with transparency
+            (0, 0, 255, 100),   # Blue with transparency
+            (0, 255, 0, 100),   # Green with transparency
+            (255, 255, 0, 100), # Yellow with transparency
+            (255, 0, 255, 100)  # Magenta with transparency
+        ]
+        color = colors[self.color_index % len(colors)]
+
         overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))  # Create an empty overlay
         overlay_draw = ImageDraw.Draw(overlay)
 
@@ -282,8 +286,7 @@ class AnnotationWindow:
                     polygon_tuples.append(polygon_tuples[0])
                 
                 overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
-            else:
-                print(f"Invalid polygon with only {len(polygon_tuples)} points")
+
 
         # Composite the overlay with the original image
         if image.mode != 'RGBA':

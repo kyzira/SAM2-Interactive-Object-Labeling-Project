@@ -126,11 +126,11 @@ class JsonReadWrite:
             self.save_json_to_file()
 
     def add_marked_frames_to_first_index(self, frames_list: list[str]):
-        self.__json_data[self.first_key]["Marked Frames"] = frames_list
+        self.__json_data["Info"]["Marked Frames"] = frames_list
         self.save_json_to_file()
 
     def get_marked_frames_from_first_index(self):
-        if "Marked Frames" in self.__json_data[self.first_key]:
+        if "Marked Frames" in self.__json_data["Info"]:
             return self.__json_data["Info"]["Marked Frames"]
         else:
             return []

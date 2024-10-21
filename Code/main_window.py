@@ -38,7 +38,7 @@ class ImageDisplayWindow(tk.Tk):
         # Saves Frame information, like the names, filepaths and so on
         self.frame_info = FrameInfoStruct(frame_dir)
         # Manages extraction of further frames on basis of Frame info
-        self.frame_extraction = LoadMoreFrames(self.frame_info)
+
 
         # Loads and interacts with the SAM2 segmentation model
         self.sam_model = Sam(frame_dir)
@@ -89,7 +89,7 @@ class ImageDisplayWindow(tk.Tk):
         self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Button to stop labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="Cancel", command=self.stop_program)
+        self.more_images_forward = ttk.Button(radio_frame, text="Finish", command=self.stop_program)
         self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Initialize canvas
@@ -133,6 +133,9 @@ class ImageDisplayWindow(tk.Tk):
 
     def extract_images(self, video_path, forwards):
         if self.initialized:
+            frame_dir = self.frame_info.frame_dir
+            frame_extraction = LoadMoreFrames(self.frame_info)
+
             popup = tk.Toplevel()
             popup.title("Processing")
 
@@ -144,19 +147,34 @@ class ImageDisplayWindow(tk.Tk):
             progress.pack(pady=10)
             progress.start()  # Start the progress bar animation
 
+            # Function to perform the extraction in a separate thread
             def extraction():
                 if forwards:
-                    self.frame_extraction.extract_forwards(video_path, 10)
+                    frame_extraction.extract_forwards(video_path, 10)
                 else:
-                    self.frame_extraction.extract_backwards(video_path, 10)
-                    
-                popup.destroy()  # Close the pop-up after the function finishes
+                    frame_extraction.extract_backwards(video_path, 10)
 
-            # Run the task in a separate thread
-            threading.Thread(target=extraction).start()
+                print("frames have been extracted! Continue resetting Sam")
 
-            self.init_sam_with_selected_observation()
-            self.reload_grid_and_images()
+            # Function to check if the thread is done
+            def check_thread():
+                if not extraction_thread.is_alive():
+                    print("Resetting Sam now!")
+                    self.sam_model.init_predictor_state()
+                    self.init_sam_with_selected_observation()
+                    self.frame_info = FrameInfoStruct(frame_dir)
+                    self.image_slider.set(0)
+                    self.reload_grid_and_images()
+                    progress.stop()
+                    popup.destroy()  # Close the popup when extraction is done
+                else:
+                    popup.after(100, check_thread)  # Check again after 100ms
+
+            # Start the extraction thread
+            extraction_thread = threading.Thread(target=extraction)
+            extraction_thread.start()
+
+            check_thread()
 
     def read_option_and_clear_entry_field(self):
         # Callback für den Button, um die neue Option hinzuzufügen.
@@ -346,6 +364,7 @@ class ImageDisplayWindow(tk.Tk):
         images_per_grid = grid_size * grid_size
         slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
         self.image_slider.config(from_=0, to=slider_max)
+        
 
         self.show_selected_images()
         
@@ -606,37 +625,45 @@ class ImageDisplayWindow(tk.Tk):
     def multithread_sam_progressbar(self):
         popup = tk.Toplevel()
         popup.title("Processing")
+        duration = len(self.frame_info.get_frame_name_list()) * 0.35  # Total duration estimate
         label = tk.Label(popup, text="Objects are being tracked...")
         label.pack(padx=20, pady=10)
         popup.grab_set()
 
-        # Create a progress bar
-        progress = ttk.Progressbar(popup, orient="horizontal", length=300, mode="indeterminate")
+        # Create a determinate progress bar
+        progress = ttk.Progressbar(popup, orient="horizontal", length=300, mode="determinate", maximum=100)
         progress.pack(pady=10)
-        progress.start()  # Start the progress bar animation
-
-        def sam_thread():
-            self.track_object()
 
         # Create a separate thread for the long-running task
-        thread = threading.Thread(target=sam_thread)
+        thread = threading.Thread(target=self.track_object)
         thread.start()
+
+        # Function to update the progress bar based on duration
+        def update_progress():
+            # Update progress based on estimated duration
+            progress['value'] = min(progress['value'] + (100 / (duration * 10)), 100)
+
+            # Continue updating if progress is less than 100%
+            if progress['value'] < 100:
+                popup.after(int(duration * 10), update_progress)
 
         # Function to check if the thread is done and close the popup
         def check_thread():
             if thread.is_alive():
-                # If the thread is still running, check again after 100ms
                 popup.after(100, check_thread)
             else:
-                # If the thread is done, stop the progress bar and close the popup
-                progress.stop()
-                popup.destroy()
+                progress['value'] = 100
+                popup.after(500, popup.destroy)
+
+        # Start updating progress
+        update_progress()
 
         # Start checking the thread status
         check_thread()
 
         # Keep the popup open until it's destroyed
         self.wait_window(popup)
+
 
     def get_polygon_list(self, img_index):
         json_data = self.json.get_json()
@@ -657,8 +684,10 @@ class ImageDisplayWindow(tk.Tk):
         shown_frames = self.frame_info.get_frames()
         annotation_window.grab_set()
 
+        observation_list = self.observations.get_observation_list()
+        color_index = observation_list.index(self.radio_var.get())
         polygon_list = self.get_polygon_list(img_index)        
-        window = AnnotationWindow(annotation_window,self. annotation_window_geomertry, shown_frames[img_index], img_index, polygon_list, self.object_class_id, self.sam_model)
+        window = AnnotationWindow(annotation_window,self. annotation_window_geomertry, shown_frames[img_index], img_index, polygon_list, self.object_class_id, self.sam_model, color_index)
 
         self.wait_window(annotation_window)
         print("Annotation window closed")
@@ -674,7 +703,7 @@ class ImageDisplayWindow(tk.Tk):
             self.multithread_sam_progressbar()
 
     def add_info_to_json(self, img_index, polygons, points = None, labels = None):
-        if not img_index:
+        if img_index == None:
             print("Error: No Image index given to add to json")
             return
         

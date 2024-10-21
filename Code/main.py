@@ -7,14 +7,14 @@ import json
 
 # Configurable options for processing video frames
 auto_labeling = False     # Automatically apply YOLO model for damage labeling
-test_mode = True          # If True, a test case is run
+test_mode = False          # If True, a test case is run
 frame_rate = 25           # Frame extraction rate in frames per second (fps)
 
 stop_flag = False         # Global flag to stop the process if required
 
 # Paths for the output directory and the CSV table of damage entries
 output_dir = r"C:\Code Python\automation-with-sam2\labeling_project"
-table_path = r"C:\Code Python\automation-with-sam2\labeling_project\avg polygons\gesammelte_einträge.csv"
+table_path = r"C:\Users\K3000\Documents\Max Vorbereitung\max_liste.csv"
 
 # Directories for saving results and the index file
 results_dir = os.path.join(output_dir, "results")
@@ -22,7 +22,7 @@ os.makedirs(results_dir, exist_ok=True)
 index_path = os.path.join(output_dir, "current_index.txt")
 
 # Load the table of damage entries from a CSV file
-damage_table = pd.read_csv(table_path, delimiter=",")
+damage_table = pd.read_csv(table_path, delimiter=";")
 total_length = len(damage_table)  # Total number of entries in the table
 
 
@@ -52,15 +52,6 @@ def increment_and_save_current_index(current_index):
 def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: dict):
     """
     Creates a JSON file containing metadata about the video frames and stores it in the frame directory.
-    
-    Args:
-        current_frame_dir (str): Directory where the frames are saved.
-        video_name (str): Name of the video.
-        frame_rate (int): The frame extraction rate (fps).
-        time_stamp (str): Time of the damage occurrence in the video (format h:min:sec).
-        observation (str): The short code describing the type of damage.
-        video_path (str): The full path to the video.
-        video_hash (int): A hash value representing the video.
     """
     dir_path = os.path.dirname(current_frame_dir)
     json_path = os.path.join(dir_path, f"{str(os.path.basename(dir_path))}.json")
@@ -154,6 +145,7 @@ if test_mode:
     app.run()
 
 else:
+    current_index = get_current_index()
     while current_index <= total_length and not stop_flag: 
         current_index = get_current_index()
 
@@ -188,7 +180,7 @@ else:
             yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
         else:  
             # Segment manually
-            window_title = (schadens_kurzel) + " " + str(damage_table.iloc[current_index]["Schadensbeschreibung"])
+            window_title = (schadens_kurzel)
             app = ImageDisplayWindow(
                 frame_dir=current_frame_dir, 
                 video_path=video_path, 

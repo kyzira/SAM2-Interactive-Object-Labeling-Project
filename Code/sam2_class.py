@@ -28,11 +28,16 @@ class Sam:
                 - When changing the frame_dir, or the images in it.
         """
         try:
+            print("SAM initialized")
             self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
             self.initialized = True
         except Exception as e:
             print(f"Error: Initializing failed: {e}")
 
+    def deep_reset_predictor(self):
+        self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
+        self.predictor.reset_state(self.inference_state)
+        
     def reset_predictor_state(self):
         """
             Resets the predictors state:
