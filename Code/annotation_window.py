@@ -24,7 +24,7 @@ class AnnotationWindow:
                 These lists can then be used to track the object throughout the whole video.
     """
 
-    def __init__(self, annotation_window: tk.Toplevel, img: Image, img_index: int, object_class_id: int, sam2):
+    def __init__(self, annotation_window: tk.Toplevel, annotation_window_geomertry, img: Image, img_index: int, polygon_list, object_class_id: int, sam2):
         """
             annotation_window:
                 This is a tkinter window class. it is used to add a canvas to it and display the image and register where on it it was clicked.
@@ -54,7 +54,15 @@ class AnnotationWindow:
 
         self.points = []
         self.labels = []
-        self.polygons = []
+
+        if len(polygon_list)>0:
+            print("Existing Polygons found!")
+            self.polygons = polygon_list
+        else:
+            self.polygons = []
+
+        self.geometry_data = None
+        self.window_maximized = False
 
         self.sam2 = sam2
         self.object_class_id = object_class_id
@@ -69,12 +77,25 @@ class AnnotationWindow:
 
         # Create a canvas
         self.canvas = tk.Canvas(self.annotation_window)
-        self.annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
+        
+        if annotation_window_geomertry["Maximized"] == True:
+            self.annotation_window.state("zoomed")
+
+        elif annotation_window_geomertry["Geometry"]:
+            annotation_window.geometry(annotation_window_geomertry["Geometry"])
+
+        else:
+            annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
+
         self.canvas.pack()
 
         # Display the image on the canvas
         self.image_id = None # ToDo: change to image_exists = False
-        self.__display_image(self.image)
+
+        if len(self.polygons)>0:
+            self.__draw_initial_polygons()
+        else:
+            self.__display_image(self.image)
 
         # Change image width when resizing
         self.annotation_window.bind('<Configure>', self.__on_resize)
@@ -91,6 +112,11 @@ class AnnotationWindow:
 
     def get_points_and_labels(self):
         return self.points, self.labels, self.polygons
+    
+    def get_geometry(self):
+        # This returns the size and position of the annotation window
+        return self.window_maximized, self.geometry_data
+
 
     def __on_resize(self, event):
         # Update canvas size to match window size
@@ -148,6 +174,9 @@ class AnnotationWindow:
 
     def __on_close(self):
         # This function is called when the annotation window is closed
+        if self.annotation_window.state() == "zoomed":
+            self.window_maximized = True
+        self.geometry_data = self.annotation_window.geometry()
         self.annotation_window.destroy()
 
     def __on_click(self, event):
@@ -236,15 +265,22 @@ class AnnotationWindow:
 
         return polygons
 
+    def __draw_initial_polygons(self):
+
+        self.image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)
+        self.__display_image(self.image)
 
     def __draw_polygons_on_image(self, image, polygons, color=(255, 0, 0, 100)):  # Default color is semi-transparent red
         overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))  # Create an empty overlay
-
         overlay_draw = ImageDraw.Draw(overlay)
 
         for polygon in polygons:
             polygon_tuples = [tuple(point) for point in polygon]
+
             if len(polygon_tuples) > 3:  # Ensure there are enough points to form a polygon
+                if polygon_tuples[0] != polygon_tuples[-1]:
+                    polygon_tuples.append(polygon_tuples[0])
+                
                 overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
             else:
                 print(f"Invalid polygon with only {len(polygon_tuples)} points")

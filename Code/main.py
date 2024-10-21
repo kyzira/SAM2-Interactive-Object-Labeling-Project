@@ -22,8 +22,7 @@ os.makedirs(results_dir, exist_ok=True)
 index_path = os.path.join(output_dir, "current_index.txt")
 
 # Load the table of damage entries from a CSV file
-usecols = ["Videoname", "Videozeitpunkt (h:min:sec)", "Schadenskürzel", "Videopfad", "Schadensbeschreibung", "Videohash"]
-damage_table = pd.read_csv(table_path, usecols=usecols, delimiter=",")
+damage_table = pd.read_csv(table_path, delimiter=",")
 total_length = len(damage_table)  # Total number of entries in the table
 
 
@@ -50,7 +49,7 @@ def increment_and_save_current_index(current_index):
         file.write(str(current_index))
 
 
-def create_json_with_info(current_frame_dir: str, video_name: str, frame_rate: int, time_stamp: str, observation: str, video_path: str, video_hash: int):
+def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: dict):
     """
     Creates a JSON file containing metadata about the video frames and stores it in the frame directory.
     
@@ -70,16 +69,42 @@ def create_json_with_info(current_frame_dir: str, video_name: str, frame_rate: i
             json_file =  json.load(file)
     else:
         json_file = dict()
-    info_name = f"Info {observation}, at {time_stamp}"
-    json_file[info_name] = {
-        "Video Name": video_name,
-        "Video Path": video_path,
-        "Extracted Frame Rate": frame_rate,
-        "Time Stamp": time_stamp,
-        "Documented Observation": observation,
-        "Videohash": video_hash
-    }
+      
+    observation_name_and_time = f"{damage_table_at_index["Schadenskürzel"]}, at {damage_table_at_index["Videozeitpunkt (h:min:sec)"]}"
 
+    # Erstelle eine Liste der relevanten Schlüssel
+    keys_to_include = [
+        "Inspektions-ID",
+        "Videoname",
+        "Rohrmaterial",
+        "Inspekteur-Name",
+        "Extracted Frame Rate",
+        "Rohrprofil",
+        "Rohrhöhe (mm)",
+        "Rohrbreite (mm)",
+        "Videohash"
+    ]
+
+    # Prüfe, ob "Info" im JSON vorhanden ist
+    if "Info" in json_file:
+        # Prüfe, ob die Beobachtung bereits dokumentiert wurde
+        if observation_name_and_time in json_file["Info"]["Documented Observations"]:
+            return
+        else:
+            json_file["Info"]["Documented Observations"].append(observation_name_and_time)
+    else:
+        # Initialisiere das "Info" Dictionary
+        json_file["Info"] = {}
+        json_file["Info"]["Video Path"] = video_path
+        json_file["Info"]["Extracted Frame Rate"] = frame_rate
+        
+        for key in keys_to_include:
+            if key in damage_table_at_index:
+                json_file["Info"][key] = damage_table_at_index[key]
+        
+        json_file["Info"]["Documented Observations"] = [observation_name_and_time]
+
+    # Schreibe das JSON in die Datei
     with open(json_path, "w") as outfile:
         json.dump(json_file, outfile, indent=4)
 
@@ -90,7 +115,7 @@ def stop_process():
 
 
 if test_mode:
-    schadens_kurzel = "BBA"
+    schadens_kurzel = "Riss"
     current_frame_dir = "C:\\Code Python\\automation-with-sam2\\labeling_project\\test folder\\source images"
     video_path = r"C:\Code Python\automation-with-sam2\labeling_project\test folder\test.mp4"
 
@@ -100,15 +125,22 @@ if test_mode:
                                                     frame_rate = frame_rate,
                                                     start_frame=400,
                                                     end_frame=2000)
-    
+    damage_table = {
+            "Inspektions-ID" : 1,
+            "Videoname": os.path.basename(video_path),
+            "Rohrmaterial": "Stein",
+            "Inspekteur-Name": "Batagan",
+            "Extracted Frame Rate": frame_rate,
+            "Rohrprofil": "Rund",
+            "Rohrhöhe (mm)": 1,
+            "Rohrbreite (mm)": 1,
+            "Videohash": "12345",
+            "Schadenskürzel": schadens_kurzel,
+            "Videozeitpunkt (h:min:sec)": "00:00:20"
+    }
+
     # Create Json with arbitrary test numbers
-    create_json_with_info(current_frame_dir=current_frame_dir, 
-                        video_name=os.path.basename(video_path),
-                        frame_rate=frame_rate,
-                        time_stamp="00:00:20",
-                        observation=schadens_kurzel,
-                        video_path=video_path,
-                        video_hash = 00000)
+    create_json_with_info(current_frame_dir, frame_rate, damage_table)
 
     window_title = (schadens_kurzel)
     app = ImageDisplayWindow(
@@ -150,7 +182,7 @@ else:
             current_index += 1
             continue
 
-        create_json_with_info(current_frame_dir, current_video_name, frame_rate, damage_time, schadens_kurzel, video_path)
+        create_json_with_info(current_frame_dir, frame_rate, damage_table.iloc[current_index])
 
         if auto_labeling:
             yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)

@@ -26,6 +26,10 @@ class ImageDisplayWindow(tk.Tk):
         self.checkbox_vars = {}
         self.stop_callback = stop_callback
         self.marked_frames = []
+        self.annotation_window_geomertry = {
+            "Maximized" : None,
+            "Geometry" : None
+        }
 
 
         # Stores the observations
@@ -43,7 +47,8 @@ class ImageDisplayWindow(tk.Tk):
         # Initializes the json storage file and reads it, if it exists
         json_path =  os.path.join(self.frame_info.working_dir, f"{str(os.path.basename(self.frame_info.working_dir))}.json")
         self.json = JsonReadWrite(json_path)
-        
+        self.marked_frames = self.json.get_marked_frames_from_first_index()
+
         if schadens_kurzel:
             self.observations.add_observation(schadens_kurzel)
 
@@ -159,7 +164,6 @@ class ImageDisplayWindow(tk.Tk):
         self.new_option_entry.delete(0, "end")
         self.update_observation_radiobuttons()
         
-
     def update_obj_id_to_selected_observation(self):
         selected_option = self.radio_var.get()
         observation_list = self.observations.get_observation_list()
@@ -634,13 +638,27 @@ class ImageDisplayWindow(tk.Tk):
         # Keep the popup open until it's destroyed
         self.wait_window(popup)
 
+    def get_polygon_list(self, img_index):
+        json_data = self.json.get_json()
+        frame_names = self.frame_info.get_frame_name_list()
+
+        if str(int(frame_names[img_index].split(".")[0])) not in json_data:
+            return []
+        if self.radio_var.get() not in json_data[str(int(frame_names[img_index].split(".")[0]))]["Observations"]:
+            return []
+        if "Mask Polygon" not in json_data[str(int(frame_names[img_index].split(".")[0]))]["Observations"][self.radio_var.get()]:
+            return []
+            
+        return json_data[str(int(frame_names[img_index].split(".")[0]))]["Observations"][self.radio_var.get()]["Mask Polygon"]
+
     def open_annotation_window_save_Coordinates(self, img_index):
         annotation_window = tk.Toplevel(self)
         annotation_window.title(f"Punkte für {self.radio_var.get()} hinzufügen")
         shown_frames = self.frame_info.get_frames()
-
         annotation_window.grab_set()
-        window = AnnotationWindow(annotation_window, shown_frames[img_index], img_index, self.object_class_id, self.sam_model)
+
+        polygon_list = self.get_polygon_list(img_index)        
+        window = AnnotationWindow(annotation_window,self. annotation_window_geomertry, shown_frames[img_index], img_index, polygon_list, self.object_class_id, self.sam_model)
 
         self.wait_window(annotation_window)
         print("Annotation window closed")
@@ -648,6 +666,8 @@ class ImageDisplayWindow(tk.Tk):
 
         # Save Coordinates
         points, labels, polygons = window.get_points_and_labels()
+
+        self.annotation_window_geomertry["Maximized"], self.annotation_window_geomertry["Geometry"] = window.get_geometry()
 
         if len(points) > 0 and len(points) == len(labels):
             self.add_info_to_json(img_index, polygons, points, labels)
