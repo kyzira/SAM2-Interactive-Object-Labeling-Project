@@ -5,8 +5,11 @@ import numpy as np
 class Sam:
     def __init__(self, frame_dir):
         # Initialize the predictor as needed
-        sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
-        model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+        # sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt"
+        # model_cfg = "configs/sam2.1/sam2.1_hiera_l.yaml"
+
+        sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
+        model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
 
         self.frame_dir = frame_dir
         torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()

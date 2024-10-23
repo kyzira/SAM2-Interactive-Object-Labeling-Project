@@ -61,9 +61,7 @@ class JsonReadWrite:
             self.__json_data[frame_num]["Observations"][observation] = dict()
 
         coordinates_dict = self.__json_data[frame_num]["Observations"][observation]
-
-        if polygons:
-            coordinates_dict["Mask Polygon"] = polygons
+        coordinates_dict["Mask Polygon"] = polygons
 
         if selection_order == 0:
             selection_order = self.__check_for_selection_order(observation)

@@ -625,7 +625,7 @@ class ImageDisplayWindow(tk.Tk):
     def multithread_sam_progressbar(self):
         popup = tk.Toplevel()
         popup.title("Processing")
-        duration = len(self.frame_info.get_frame_name_list()) * 0.35  # Total duration estimate
+        duration = len(self.frame_info.get_frame_name_list()) * 0.15  # Total duration estimate
         label = tk.Label(popup, text="Objects are being tracked...")
         label.pack(padx=20, pady=10)
         popup.grab_set()
@@ -764,6 +764,15 @@ class ImageDisplayWindow(tk.Tk):
         
         self.json.save_json_to_file()
 
+    def on_key_press(self, event):
+        if event.keysym == "Return":
+            self.read_option_and_clear_entry_field()
+        elif event.keysym == "Right":
+            self.next_images()
+        elif event.keysym == "Left":
+            self.prev_images()
+
+
     def run(self):
         """Start the Tkinter event loop."""
         self.initialized = True
@@ -771,7 +780,9 @@ class ImageDisplayWindow(tk.Tk):
         self.init_sam_with_selected_observation()
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
         self.canvas.bind("<Button-3>", self.mark_up_image)  # Bind right click to canvas
+        self.bind('<Key>', self.on_key_press)
         
+
         self.state("zoomed")    
         self.update_idletasks()
         self.update()

@@ -2,12 +2,12 @@ import os
 import pandas as pd
 from extract_frames_from_video import extract_frames_by_damage_time, extract_frames_by_frame
 from main_window import ImageDisplayWindow
-import yolo_sam_cooperation as yolo
+# import yolo_sam_cooperation as yolo
 import json
 
 # Configurable options for processing video frames
 auto_labeling = False     # Automatically apply YOLO model for damage labeling
-test_mode = False          # If True, a test case is run
+test_mode = True          # If True, a test case is run
 frame_rate = 25           # Frame extraction rate in frames per second (fps)
 
 stop_flag = False         # Global flag to stop the process if required
@@ -139,7 +139,7 @@ if test_mode:
         video_path=video_path, 
         frame_rate=frame_rate, 
         window_title=window_title, 
-        schadens_kurzel=schadens_kurzel, 
+        # schadens_kurzel=schadens_kurzel, 
         stop_callback=stop_process
     )
     app.run()
@@ -171,13 +171,14 @@ else:
 
         if not extraction_succesful:
             # Skip this index
-            current_index += 1
+            increment_and_save_current_index(current_index)
             continue
 
         create_json_with_info(current_frame_dir, frame_rate, damage_table.iloc[current_index])
 
         if auto_labeling:
-            yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
+            print()
+#            yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
         else:  
             # Segment manually
             window_title = (schadens_kurzel)
