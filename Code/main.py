@@ -4,17 +4,18 @@ from extract_frames_from_video import extract_frames_by_damage_time, extract_fra
 from main_window import ImageDisplayWindow
 # import yolo_sam_cooperation as yolo
 import json
+import numpy as np
 
 # Configurable options for processing video frames
 auto_labeling = False     # Automatically apply YOLO model for damage labeling
-test_mode = True          # If True, a test case is run
+test_mode = False          # If True, a test case is run
 frame_rate = 25           # Frame extraction rate in frames per second (fps)
 
 stop_flag = False         # Global flag to stop the process if required
 
 # Paths for the output directory and the CSV table of damage entries
-output_dir = r"C:\Code Python\automation-with-sam2\labeling_project"
-table_path = r"C:\Users\K3000\Documents\Max Vorbereitung\max_liste.csv"
+output_dir = r"\\192.168.200.5\Buero\Projekte\Automatic damage detection\Label Data"
+table_path = r"\\192.168.200.5\Buero\Projekte\Automatic damage detection\Label Data\Max Info\max_liste.csv"
 
 # Directories for saving results and the index file
 results_dir = os.path.join(output_dir, "results")
@@ -49,7 +50,7 @@ def increment_and_save_current_index(current_index):
         file.write(str(current_index))
 
 
-def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: dict):
+def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: pd.Series):
     """
     Creates a JSON file containing metadata about the video frames and stores it in the frame directory.
     """
@@ -57,11 +58,14 @@ def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_
     json_path = os.path.join(dir_path, f"{str(os.path.basename(dir_path))}.json")
     if os.path.exists(json_path):
         with open(json_path, "r") as file:
-            json_file =  json.load(file)
+            json_file = json.load(file)
     else:
         json_file = dict()
       
-    observation_name_and_time = f"{damage_table_at_index["Schadenskürzel"]}, at {damage_table_at_index["Videozeitpunkt (h:min:sec)"]}"
+    observation_name_and_time = f"{damage_table_at_index['Schadenskürzel']}, at {damage_table_at_index['Videozeitpunkt (h:min:sec)']}"
+
+    # Konvertiere Pandas spezifische Typen in Python-Typen
+    damage_info_converted = damage_table_at_index.apply(lambda x: int(x) if isinstance(x, (np.int64, np.int32)) else x)
 
     # Erstelle eine Liste der relevanten Schlüssel
     keys_to_include = [
@@ -90,15 +94,14 @@ def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_
         json_file["Info"]["Extracted Frame Rate"] = frame_rate
         
         for key in keys_to_include:
-            if key in damage_table_at_index:
-                json_file["Info"][key] = damage_table_at_index[key]
+            if key in damage_info_converted:
+                json_file["Info"][key] = damage_info_converted[key]
         
         json_file["Info"]["Documented Observations"] = [observation_name_and_time]
 
     # Schreibe das JSON in die Datei
     with open(json_path, "w") as outfile:
         json.dump(json_file, outfile, indent=4)
-
 
 def stop_process():
     global stop_flag
