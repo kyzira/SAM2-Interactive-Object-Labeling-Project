@@ -75,7 +75,7 @@ pip install -e ".[notebooks]"
 ```
 
 ### PyTorch and Nvidia Drivers
-You will need the stable version of PyTorch, you can download it from their official Website [here](https://pytorch.org/).
+You will need the stable version of PyTorch, you can download it from their [official Website](https://pytorch.org/).
 Scroll down a bit and it will give you option, on what pytorch version you want to download.
 Select:
 1. **Stable**
@@ -98,7 +98,7 @@ After the download is finished, run it and check the box to add the path to your
 
 The last thing you need is the cuDNN Library, you can download it [here](https://developer.nvidia.com/cudnn)
 
-Finally restart your PC before continueing.
+Finally restart your PC before continuing.
 
 ## Getting Started
 Before being able to just run the main.py, you'll need to set up the set path inside the code.
