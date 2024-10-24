@@ -1,0 +1,17 @@
+{
+    "Info": {
+        "Video Path": "\\\\192.168.200.8\\Datengrab\\Dorr\\3-17-11-17\\AV Starnberger See\\Bernried vom 19.12.2016-02.06.2017\\Bernried RW-Kanal vom 19.12.2016-03.05.2017\\Sichtversion 001\\60R3320G.mpg",
+        "Extracted Frame Rate": 25,
+        "Inspektions-ID": 82889,
+        "Videoname": "60R3320G.mpg",
+        "Rohrmaterial": "Beton",
+        "Inspekteur-Name": "G. Rottmair",
+        "Rohrprofil": "Kreisprofil",
+        "Rohrbreite (mm)": 500,
+        "Videohash": 2614136379,
+        "Videozeitpunkt (h:min:sec)": "00:01:14",
+        "Documented Observations": [
+            "BCAEA, at 00:01:14"
+        ]
+    }
+}

@@ -1,0 +1,17 @@
+{
+    "Info": {
+        "Video Path": "\\\\192.168.200.8\\Datengrab\\Dorr\\Daten ab 10-2\u00df15\\TV-Untersuchung\\Stadt Filderstadt\\Filderstadt vom 28.09.-27.10.2015\\Sichtversion 001\\F2194O3071011A.MPG",
+        "Extracted Frame Rate": 25,
+        "Inspektions-ID": 130494,
+        "Videoname": "F2194O3071011A.MPG",
+        "Rohrmaterial": "Beton",
+        "Inspekteur-Name": "Dorr/M\u00f6hring",
+        "Rohrprofil": "Kreisprofil",
+        "Rohrbreite (mm)": 300,
+        "Videohash": 3904768225,
+        "Videozeitpunkt (h:min:sec)": "00:01:16",
+        "Documented Observations": [
+            "BCAEA, at 00:01:16"
+        ]
+    }
+}

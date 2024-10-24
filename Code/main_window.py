@@ -14,7 +14,7 @@ import numpy as np
 
 
 class ImageDisplayWindow(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None, stop_callback=None):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None, stop_callback = None, sam_paths = dict()):
         super().__init__()
 
         self.title(window_title)
@@ -41,7 +41,7 @@ class ImageDisplayWindow(tk.Tk):
 
 
         # Loads and interacts with the SAM2 segmentation model
-        self.sam_model = Sam(frame_dir)
+        self.sam_model = Sam(frame_dir, sam_paths)
         self.object_class_id = 0
 
         # Initializes the json storage file and reads it, if it exists

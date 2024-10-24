@@ -2,21 +2,29 @@ import os
 import pandas as pd
 from extract_frames_from_video import extract_frames_by_damage_time, extract_frames_by_frame
 from main_window import ImageDisplayWindow
-# import yolo_sam_cooperation as yolo
 import json
 import numpy as np
+import yaml
 
-# Configurable options for processing video frames
-auto_labeling = False     # Automatically apply YOLO model for damage labeling
-test_mode = False          # If True, a test case is run
-frame_rate = 25           # Frame extraction rate in frames per second (fps)
+# Load configuration from config.yaml
+script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the directory of the current script
+config_path = os.path.join(script_dir, "..", "config.yaml")  # Adjust the path as needed
+with open(config_path, 'r') as config_file:
+    config = yaml.safe_load(config_file)
 
-stop_flag = False         # Global flag to stop the process if required
+# Configurable options for processing video frames from config.yaml
+auto_mode = config['mode'].get('auto_mode', False)  # Defaulting to False if not in config
+test_mode = config['mode'].get('test_mode', False)   # Fetching the test_mode from YAML
+view_mode = config["mode"].get("view_mode", False)
+frame_rate = config['test_mode_setup'].get('Extracted Frame Rate', 25)  # Fetching frame rate from test_mode setup
 
-# Paths for the output directory and the CSV table of damage entries
-output_dir = r"\\192.168.200.5\Buero\Projekte\Automatic damage detection\Label Data"
-table_path = r"\\192.168.200.5\Buero\Projekte\Automatic damage detection\Label Data\Max Info\max_liste.csv"
+stop_flag = False  # Global flag to stop the process if required
 
+# Paths for the output directory and the CSV table of damage entries from config.yaml
+output_dir = config['default_paths'].get('output_path')
+table_path = config['default_paths'].get('table_path')
+
+sam_paths = config.get("sam_model_paths")
 # Directories for saving results and the index file
 results_dir = os.path.join(output_dir, "results")
 os.makedirs(results_dir, exist_ok=True)
@@ -25,7 +33,6 @@ index_path = os.path.join(output_dir, "current_index.txt")
 # Load the table of damage entries from a CSV file
 damage_table = pd.read_csv(table_path, delimiter=";")
 total_length = len(damage_table)  # Total number of entries in the table
-
 
 def get_current_index():
     """
@@ -39,7 +46,6 @@ def get_current_index():
     else:
         return 0
 
-
 def increment_and_save_current_index(current_index):
     """
     Increments the current index and saves it to the index file.
@@ -48,7 +54,6 @@ def increment_and_save_current_index(current_index):
     current_index += 1
     with open(index_path, "w") as file:
         file.write(str(current_index))
-
 
 def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: pd.Series):
     """
@@ -61,36 +66,26 @@ def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_
             json_file = json.load(file)
     else:
         json_file = dict()
-      
+    
     observation_name_and_time = f"{damage_table_at_index['Schadenskürzel']}, at {damage_table_at_index['Videozeitpunkt (h:min:sec)']}"
 
-    # Konvertiere Pandas spezifische Typen in Python-Typen
+    # Convert Pandas-specific types to Python types
     damage_info_converted = damage_table_at_index.apply(lambda x: int(x) if isinstance(x, (np.int64, np.int32)) else x)
 
-    # Erstelle eine Liste der relevanten Schlüssel
-    keys_to_include = [
-        "Inspektions-ID",
-        "Videoname",
-        "Rohrmaterial",
-        "Inspekteur-Name",
-        "Extracted Frame Rate",
-        "Rohrprofil",
-        "Rohrhöhe (mm)",
-        "Rohrbreite (mm)",
-        "Videohash"
-    ]
+    # Create a list of relevant keys from config.yaml
+    keys_to_include = config['default_table_columns']
 
-    # Prüfe, ob "Info" im JSON vorhanden ist
+    # Check if "Info" is present in the JSON
     if "Info" in json_file:
-        # Prüfe, ob die Beobachtung bereits dokumentiert wurde
+        # Check if the observation has already been documented
         if observation_name_and_time in json_file["Info"]["Documented Observations"]:
             return
         else:
             json_file["Info"]["Documented Observations"].append(observation_name_and_time)
     else:
-        # Initialisiere das "Info" Dictionary
+        # Initialize the "Info" dictionary
         json_file["Info"] = {}
-        json_file["Info"]["Video Path"] = video_path
+        json_file["Info"]["Video Path"] = video_path  # `video_path` needs to be defined in the scope
         json_file["Info"]["Extracted Frame Rate"] = frame_rate
         
         for key in keys_to_include:
@@ -99,7 +94,7 @@ def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_
         
         json_file["Info"]["Documented Observations"] = [observation_name_and_time]
 
-    # Schreibe das JSON in die Datei
+    # Write the JSON to the file
     with open(json_path, "w") as outfile:
         json.dump(json_file, outfile, indent=4)
 
@@ -108,42 +103,32 @@ def stop_process():
     stop_flag = True
 
 
+
 if test_mode:
-    schadens_kurzel = "Riss"
-    current_frame_dir = "C:\\Code Python\\automation-with-sam2\\labeling_project\\test folder\\source images"
-    video_path = r"C:\Code Python\automation-with-sam2\labeling_project\test folder\test.mp4"
+    # Using test_mode_setup values from config.yaml
+    current_frame_dir = config['test_mode_setup']['current_frame_dir']
+    video_path = config['test_mode_setup']['video_path']
 
-
-    extraction_succesful = extract_frames_by_frame(input_path=video_path, 
+    extraction_successful = extract_frames_by_frame(input_path=video_path, 
                                                     output_path=current_frame_dir, 
-                                                    frame_rate = frame_rate,
+                                                    frame_rate=frame_rate,
                                                     start_frame=400,
                                                     end_frame=2000)
-    damage_table = {
-            "Inspektions-ID" : 1,
-            "Videoname": os.path.basename(video_path),
-            "Rohrmaterial": "Stein",
-            "Inspekteur-Name": "Batagan",
-            "Extracted Frame Rate": frame_rate,
-            "Rohrprofil": "Rund",
-            "Rohrhöhe (mm)": 1,
-            "Rohrbreite (mm)": 1,
-            "Videohash": "12345",
-            "Schadenskürzel": schadens_kurzel,
-            "Videozeitpunkt (h:min:sec)": "00:00:20"
-    }
 
-    # Create Json with arbitrary test numbers
+    # Using test_mode_table values from config.yaml
+    damage_table = pd.Series(config['test_mode_table'])
+
+    # Create JSON with test numbers
     create_json_with_info(current_frame_dir, frame_rate, damage_table)
 
-    window_title = (schadens_kurzel)
+    window_title = damage_table['Schadenskürzel']
     app = ImageDisplayWindow(
         frame_dir=current_frame_dir, 
         video_path=video_path, 
         frame_rate=frame_rate, 
         window_title=window_title, 
-        # schadens_kurzel=schadens_kurzel, 
-        stop_callback=stop_process
+        stop_callback=stop_process,
+        sam_paths=sam_paths
     )
     app.run()
 
@@ -154,44 +139,43 @@ else:
 
         # Prepare everything
         current_video_name = damage_table.iloc[current_index]['Videoname']
-        schadens_kurzel  = str(damage_table.iloc[current_index]["Schadenskürzel"])
+        schadens_kurzel = str(damage_table.iloc[current_index]["Schadenskürzel"])
         video_path = damage_table.iloc[current_index]['Videopfad']
         damage_time = damage_table.iloc[current_index]['Videozeitpunkt (h:min:sec)']
 
         current_dir = os.path.join(results_dir, current_video_name)
         current_frame_dir = os.path.join(current_dir, "source images")
-        
+
         damage_time_split = damage_time.split(":")
-        damage_second = int(damage_time_split[0]) *60*60 + int(damage_time_split[1])*60 + int(damage_time_split[2])
-
-
+        damage_second = int(damage_time_split[0]) * 60 * 60 + int(damage_time_split[1]) * 60 + int(damage_time_split[2])
 
         # Convert video into frames
-        extraction_succesful = extract_frames_by_damage_time(input_path=video_path, 
-                                                            output_path=current_frame_dir, 
-                                                            damage_second=damage_second, 
-                                                            frame_rate = frame_rate)
+        extraction_successful = extract_frames_by_damage_time(input_path=video_path, 
+                                                               output_path=current_frame_dir, 
+                                                               damage_second=damage_second, 
+                                                               frame_rate=frame_rate)
 
-        if not extraction_succesful:
+        if not extraction_successful:
             # Skip this index
             increment_and_save_current_index(current_index)
             continue
 
         create_json_with_info(current_frame_dir, frame_rate, damage_table.iloc[current_index])
 
-        if auto_labeling:
+        if auto_mode:
             print()
-#            yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
+            # yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
         else:  
             # Segment manually
-            window_title = (schadens_kurzel)
+            window_title = schadens_kurzel
             app = ImageDisplayWindow(
                 frame_dir=current_frame_dir, 
                 video_path=video_path, 
                 frame_rate=frame_rate, 
                 window_title=window_title, 
                 schadens_kurzel=schadens_kurzel, 
-                stop_callback=stop_process
+                stop_callback=stop_process,
+                sam_paths=sam_paths
             )
             app.run()
 
