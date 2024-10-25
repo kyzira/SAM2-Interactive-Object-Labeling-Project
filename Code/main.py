@@ -18,6 +18,8 @@ test_mode = config['mode'].get('test_mode', False)   # Fetching the test_mode fr
 view_mode = config["mode"].get("view_mode", False)
 frame_rate = config['test_mode_setup'].get('Extracted Frame Rate', 25)  # Fetching frame rate from test_mode setup
 
+add_obj_button_list = config.get("object_add_buttons", [])
+
 stop_flag = False  # Global flag to stop the process if required
 
 # Paths for the output directory and the CSV table of damage entries from config.yaml
@@ -33,6 +35,7 @@ index_path = os.path.join(output_dir, "current_index.txt")
 # Load the table of damage entries from a CSV file
 damage_table = pd.read_csv(table_path, delimiter=";")
 total_length = len(damage_table)  # Total number of entries in the table
+
 
 def get_current_index():
     """
@@ -67,7 +70,7 @@ def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_
     else:
         json_file = dict()
     
-    observation_name_and_time = f"{damage_table_at_index['Schadenskürzel']}, at {damage_table_at_index['Videozeitpunkt (h:min:sec)']}"
+    observation_name_and_time = f"{damage_table_at_index['Label']}, at {damage_table_at_index['Videozeitpunkt (h:min:sec)']}"
 
     # Convert Pandas-specific types to Python types
     damage_info_converted = damage_table_at_index.apply(lambda x: int(x) if isinstance(x, (np.int64, np.int32)) else x)
@@ -121,17 +124,23 @@ if test_mode:
     # Create JSON with test numbers
     create_json_with_info(current_frame_dir, frame_rate, damage_table)
 
-    window_title = damage_table['Schadenskürzel']
+    window_title = damage_table['Label']
     app = ImageDisplayWindow(
         frame_dir=current_frame_dir, 
         video_path=video_path, 
         frame_rate=frame_rate, 
+        schadens_kurzel=damage_table['Label'],
         window_title=window_title, 
         stop_callback=stop_process,
-        sam_paths=sam_paths
+        sam_paths=sam_paths,
+        add_object_buttons=add_obj_button_list
     )
     app.run()
 
+elif view_mode:
+    while not stop_flag:
+        app = ImageDisplayWindow(stop_callback=stop_process)
+        app.run()
 else:
     current_index = get_current_index()
     while current_index <= total_length and not stop_flag: 
@@ -139,9 +148,11 @@ else:
 
         # Prepare everything
         current_video_name = damage_table.iloc[current_index]['Videoname']
-        schadens_kurzel = str(damage_table.iloc[current_index]["Schadenskürzel"])
+        schadens_kurzel = str(damage_table.iloc[current_index]["Label"])
         video_path = damage_table.iloc[current_index]['Videopfad']
         damage_time = damage_table.iloc[current_index]['Videozeitpunkt (h:min:sec)']
+        
+
 
         current_dir = os.path.join(results_dir, current_video_name)
         current_frame_dir = os.path.join(current_dir, "source images")
@@ -175,7 +186,8 @@ else:
                 window_title=window_title, 
                 schadens_kurzel=schadens_kurzel, 
                 stop_callback=stop_process,
-                sam_paths=sam_paths
+                sam_paths=sam_paths,
+                add_object_buttons=add_obj_button_list
             )
             app.run()
 

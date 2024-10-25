@@ -14,7 +14,7 @@ import numpy as np
 
 
 class ImageDisplayWindow(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "Image Grid Display with Input Field", schadens_kurzel = None, stop_callback = None, sam_paths = dict()):
+    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "View Mode", schadens_kurzel = None, stop_callback = None, sam_paths = dict(), add_object_buttons = []):
         super().__init__()
 
         self.title(window_title)
@@ -35,6 +35,19 @@ class ImageDisplayWindow(tk.Tk):
         # Stores the observations
         self.observations = observation_management.RadioButtonManagement()     
 
+
+        if not frame_dir:
+            print("Frame Dir not given, switching to View Mode")
+            frame_dir = filedialog.askdirectory(title="Select the Labeled Info Directory")
+
+            # If the Video folder was given:
+            if os.path.isdir(os.path.join(frame_dir, "source images")):
+                frame_dir = os.path.join(frame_dir, "source images")
+
+            # If neither the Video folder was given, nor the source images folder then quit
+            elif os.path.basename(frame_dir) != "source images":
+                return
+                
         # Saves Frame information, like the names, filepaths and so on
         self.frame_info = FrameInfoStruct(frame_dir)
         # Manages extraction of further frames on basis of Frame info
@@ -64,13 +77,19 @@ class ImageDisplayWindow(tk.Tk):
         radio_frame = tk.Frame(self)
         radio_frame.pack(side="top", fill="x", padx=10, pady=5)
 
-        # Add widgets in the radio_frame horizontally
-        tk.Label(radio_frame, text="Add option:").pack(side="left", padx=(0, 5))
-        self.new_option_entry = tk.Entry(radio_frame, width=15)
-        self.new_option_entry.pack(side="left", padx=(0, 5))
+        # Create a new frame to hold the label and entry vertically
+        option_frame = tk.Frame(radio_frame)
+        option_frame.pack(side="left")  # Pack this new frame to the left side of the main frame
+
+        # Add the label for the option on top
+        tk.Label(option_frame, text="Add option:").pack(side="top", padx=(0, 5))  # Pack the label on top
+
+        # Add the entry field below the label
+        self.new_option_entry = tk.Entry(option_frame, width=15)
+        self.new_option_entry.pack(side="top", padx=(0, 5))  # Pack the entry below the label
 
         # Add button
-        add_button = ttk.Button(radio_frame, text="Add", command=self.read_option_and_clear_entry_field)
+        add_button = ttk.Button(radio_frame, text="Add", command=self.read_option_and_clear_entry_field, padding=(10, 10))
         add_button.pack(side="left", padx=(5, 0))
 
         # Radiobuttons container
@@ -80,17 +99,31 @@ class ImageDisplayWindow(tk.Tk):
         self.wait_label = tk.Label(radio_frame, text="", font=("Helvetica", 16), fg="red")
         self.wait_label.pack(side="left", padx=10, pady=5)
 
-        # Button to delete labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="delete unselected labels", command=self.delete_damage)
-        self.more_images_forward.pack(side="left", padx=(5, 5))
-
         # Button to skip to next label
-        self.more_images_forward = ttk.Button(radio_frame, text="Next", command=self.destroy)
+        self.more_images_forward = ttk.Button(radio_frame, text="Next", command=self.close_window, padding=(10, 10))
         self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Button to stop labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="Finish", command=self.stop_program)
+        self.more_images_forward = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(n),  padding=(10, 10))
         self.more_images_forward.pack(side="right", padx=(5, 5))
+
+        # Seperate Frame for the Buttons
+        button_frame = tk.Frame(self)
+        button_frame.pack(side="top", fill="x", padx=10, pady=5)
+
+        # Create a style for the button with custom font color
+        style = ttk.Style()
+        style.configure("Custom.TButton", background="red")
+                        
+        # Add the predefined Buttons
+        if len(add_object_buttons) > 0:
+            for obj in add_object_buttons:
+                button = ttk.Button(button_frame, text=f"Add new {obj}", command=lambda n=obj: self.read_option_and_clear_entry_field(n))
+                button.pack(side="left", padx=(5, 0))  
+
+        # Button to delete labeling
+        self.delete_button = ttk.Button(button_frame, text="delete unselected labels", command=self.delete_damage, style="Custom.TButton")
+        self.delete_button.pack(side="left", padx=(50))
 
         # Initialize canvas
         self.canvas = tk.Canvas(self, width=1000, height=800, bg="white")
@@ -128,8 +161,7 @@ class ImageDisplayWindow(tk.Tk):
 
         self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
         self.more_images_forward.pack(side="left", padx=(5, 0))
-
-        
+    
 
     def extract_images(self, video_path, forwards):
         if self.initialized:
@@ -176,9 +208,14 @@ class ImageDisplayWindow(tk.Tk):
 
             check_thread()
 
-    def read_option_and_clear_entry_field(self):
+    def read_option_and_clear_entry_field(self, obj = None):
+        if obj:
+            to_add = obj
+        else:
+            to_add = self.new_option_entry.get().strip()
+
         # Callback für den Button, um die neue Option hinzuzufügen.
-        self.observations.add_observation(self.new_option_entry.get().strip())
+        self.observations.add_observation(to_add)
         self.new_option_entry.delete(0, "end")
         self.update_observation_radiobuttons()
         
@@ -261,9 +298,11 @@ class ImageDisplayWindow(tk.Tk):
         self.update_observation_radiobuttons()
         self.reload_grid_and_images()
 
-    def stop_program(self):
+    def close_window(self, stop=False):
         """Function to stop the program and signal the loop to exit."""
-        if self.stop_callback:
+        self.json.save_json_to_file()
+        
+        if self.stop_callback and stop:
             self.stop_callback()  # Call the stop callback to stop the loop
         self.destroy()
 
@@ -625,7 +664,7 @@ class ImageDisplayWindow(tk.Tk):
     def multithread_sam_progressbar(self):
         popup = tk.Toplevel()
         popup.title("Processing")
-        duration = len(self.frame_info.get_frame_name_list()) * 0.15  # Total duration estimate
+        duration = len(self.frame_info.get_frame_name_list()) * 0.25  # Total duration estimate
         label = tk.Label(popup, text="Objects are being tracked...")
         label.pack(padx=20, pady=10)
         popup.grab_set()
@@ -788,3 +827,7 @@ class ImageDisplayWindow(tk.Tk):
         self.update()
         self.reload_grid_and_images()
         self.mainloop()
+
+if __name__ == "__main__":
+    app = ImageDisplayWindow()
+    app.run()
