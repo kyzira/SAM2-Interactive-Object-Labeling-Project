@@ -23,7 +23,7 @@ If you already have a conda environment, you can create a new environment and sk
 2. Install Conda with your installer of choice, **Important:** Activate the Checkbox to add Conda to your PATH Environment variable.
 3. After installation you can create a new Conda Environment, for example named ``sam2``, with following command: 
     ``` bash
-    conda create -n sam2
+    conda create -n sam2 python
     ```
 4. You can now access your environment with:
     ``` bash
