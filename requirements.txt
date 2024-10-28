@@ -3,7 +3,8 @@ pyyaml
 opencv-python
 matplotlib
 shapely
-scikit-image
 scipy
-sam2
+numpy
+tk
+scikit-image
 ultralytics

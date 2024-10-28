@@ -7,14 +7,14 @@ from frame_info_struct import FrameInfoStruct
 from further_extract_frames import LoadMoreFrames
 import os
 import threading
-from PIL import Image, ImageTk, ImageDraw
 from annotation_window import AnnotationWindow
 import cv2
 import numpy as np
+from image_grid_manager import ImageGridManager
 
 
 class ImageDisplayWindow(tk.Tk):
-    def __init__(self, frame_dir = None, video_path = None, frame_rate = None, window_title = "View Mode", schadens_kurzel = None, stop_callback = None, sam_paths = dict(), add_object_buttons = []):
+    def __init__(self, frame_dir=None, video_path=None, frame_rate=None, window_title="View Mode", schadens_kurzel=None, stop_callback=None, sam_paths=dict(), add_object_buttons=[]):
         super().__init__()
 
         self.title(window_title)
@@ -23,18 +23,16 @@ class ImageDisplayWindow(tk.Tk):
         self.image_paths = []
         self.initialized = False
         self.video_path = video_path
-        self.checkbox_vars = {}
+        checkbox_vars = {}
         self.stop_callback = stop_callback
         self.marked_frames = []
         self.annotation_window_geomertry = {
-            "Maximized" : None,
-            "Geometry" : None
+            "Maximized": None,
+            "Geometry": None
         }
 
-
         # Stores the observations
-        self.observations = observation_management.RadioButtonManagement()     
-
+        self.observations = observation_management.RadioButtonManagement()
 
         if not frame_dir:
             print("Frame Dir not given, switching to View Mode")
@@ -47,18 +45,17 @@ class ImageDisplayWindow(tk.Tk):
             # If neither the Video folder was given, nor the source images folder then quit
             elif os.path.basename(frame_dir) != "source images":
                 return
-                
+
         # Saves Frame information, like the names, filepaths and so on
         self.frame_info = FrameInfoStruct(frame_dir)
         # Manages extraction of further frames on basis of Frame info
-
 
         # Loads and interacts with the SAM2 segmentation model
         self.sam_model = Sam(frame_dir, sam_paths)
         self.object_class_id = 0
 
         # Initializes the json storage file and reads it, if it exists
-        json_path =  os.path.join(self.frame_info.working_dir, f"{str(os.path.basename(self.frame_info.working_dir))}.json")
+        json_path = os.path.join(self.frame_info.working_dir, f"{str(os.path.basename(self.frame_info.working_dir))}.json")
         self.json = JsonReadWrite(json_path)
         self.marked_frames = self.json.get_marked_frames_from_first_index()
 
@@ -72,7 +69,7 @@ class ImageDisplayWindow(tk.Tk):
 
         # Radiobutton variable to store the selected option
         self.radio_var = tk.StringVar()
-        
+
         # Frame for Radiobuttons and input field
         radio_frame = tk.Frame(self)
         radio_frame.pack(side="top", fill="x", padx=10, pady=5)
@@ -104,25 +101,25 @@ class ImageDisplayWindow(tk.Tk):
         self.more_images_forward.pack(side="right", padx=(5, 5))
 
         # Button to stop labeling
-        self.more_images_forward = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(n),  padding=(10, 10))
-        self.more_images_forward.pack(side="right", padx=(5, 5))
+        self.finish_button = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(n), padding=(10, 10))
+        self.finish_button.pack(side="right", padx=(5, 5))
 
-        # Seperate Frame for the Buttons
+        # Separate Frame for the Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(side="top", fill="x", padx=10, pady=5)
 
         # Create a style for the button with custom font color
         style = ttk.Style()
         style.configure("Custom.TButton", background="red")
-                        
+
         # Add the predefined Buttons
         if len(add_object_buttons) > 0:
             for obj in add_object_buttons:
                 button = ttk.Button(button_frame, text=f"Add new {obj}", command=lambda n=obj: self.read_option_and_clear_entry_field(n))
-                button.pack(side="left", padx=(5, 0))  
+                button.pack(side="left", padx=(5, 0))
 
         # Button to delete labeling
-        self.delete_button = ttk.Button(button_frame, text="delete unselected labels", command=self.delete_damage, style="Custom.TButton")
+        self.delete_button = ttk.Button(button_frame, text="Delete unselected labels", command=self.delete_damage, style="Custom.TButton")
         self.delete_button.pack(side="left", padx=(50))
 
         # Initialize canvas
@@ -133,34 +130,53 @@ class ImageDisplayWindow(tk.Tk):
         input_frame = tk.Frame(self)
         input_frame.pack(side="top", fill="x", padx=10, pady=5)
 
+        # Initialize ImageGridManager before creating buttons that call its methods
+        self.grid = ImageGridManager(
+            canvas=self.canvas,
+            image_slider=None,  # Placeholder; will be set after creating the slider
+            grid_entry=None,    # Placeholder; will be set after creating the entry
+            frame_info=self.frame_info,
+            json=self.json,
+            observations=self.observations,
+            checkbox_vars=checkbox_vars,
+            radio_var=self.radio_var
+        )
+
         # Add Previous and Next buttons to navigate images
-        self.prev_button = ttk.Button(input_frame, text="<", command=self.prev_images)
+        self.prev_button = ttk.Button(input_frame, text="<", command=self.grid.prev_images)
         self.prev_button.pack(side="left", padx=(5, 0))
 
-        self.next_button = ttk.Button(input_frame, text=">", command=self.next_images)
+        self.next_button = ttk.Button(input_frame, text=">", command=self.grid.next_images)
         self.next_button.pack(side="left", padx=(5, 0))
 
         # Short slider (10% of the window width)
-        self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient="horizontal", command=self.slider_update)
-        self.image_slider.pack(side="left", fill="x", expand=False, padx=(10, 5), ipadx=12)  # Adjust width with ipadx
+        self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient="horizontal", command=self.grid.slider_update)
+        self.image_slider.pack(side="left", fill="x", expand=False, padx=(10, 5), ipadx=12)
 
-        # Label
+        # Label for grid size
         tk.Label(input_frame, text="Grid Size:").pack(side="left", padx=(0, 5))
 
-        # Entry field with specified width
-        self.grid_entry = tk.Entry(input_frame, width=10)  # Set the width here
+        # Entry field for grid size
+        self.grid_entry = tk.Entry(input_frame, width=10)
         self.grid_entry.insert(0, "5")
         self.grid_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
         # Button for updating grid
-        self.button = ttk.Button(input_frame, text="Update Grid", command=self.reload_grid_and_images)
+        self.button = ttk.Button(input_frame, text="Update Grid", command=self.grid.reload_grid_and_images)
         self.button.pack(side="left", padx=(5, 0))
 
-        self.more_images_back = ttk.Button(input_frame, text="extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
+        self.more_images_back = ttk.Button(input_frame, text="Extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
         self.more_images_back.pack(side="left", padx=(5, 0))
 
-        self.more_images_forward = ttk.Button(input_frame, text="extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
+        self.more_images_forward = ttk.Button(input_frame, text="Extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
         self.more_images_forward.pack(side="left", padx=(5, 0))
+
+        # After the grid instance is created, link the slider and grid entry
+        self.grid.image_slider = self.image_slider  # Set the slider
+        self.grid.grid_entry = self.grid_entry  # Set the grid entry
+
+
+
     
 
     def extract_images(self, video_path, forwards):
@@ -196,7 +212,7 @@ class ImageDisplayWindow(tk.Tk):
                     self.init_sam_with_selected_observation()
                     self.frame_info = FrameInfoStruct(frame_dir)
                     self.image_slider.set(0)
-                    self.reload_grid_and_images()
+                    self.grid.reload_grid_and_images()
                     progress.stop()
                     popup.destroy()  # Close the popup when extraction is done
                 else:
@@ -255,7 +271,7 @@ class ImageDisplayWindow(tk.Tk):
             widget.destroy()
 
         # Reset Checkbox_vars
-        self.checkbox_vars = {}
+        self.grid.checkbox_vars = {}
 
         observation_list = self.observations.get_observation_list()
         # Create the Radiobuttons in a horizontal layout
@@ -274,11 +290,11 @@ class ImageDisplayWindow(tk.Tk):
 
             # Create a Checkbutton below each Radiobutton
             check_var = tk.BooleanVar(value=True)  # Set to True initially (checked)
-            checkbox = tk.Checkbutton(frame, variable=check_var, bg=color_hex, command=self.show_selected_images)
+            checkbox = tk.Checkbutton(frame, variable=check_var, bg=color_hex, command=self.grid.show_selected_images)
             checkbox.pack()
 
             # Store the check_var in a dictionary with the option as the key
-            self.checkbox_vars[option] = check_var
+            self.grid.checkbox_vars[option] = check_var
 
         # Set the default selection to the first option
         if observation_list:
@@ -289,19 +305,19 @@ class ImageDisplayWindow(tk.Tk):
         to_delete_list = []
         observation_list = self.observations.get_observation_list()
         for observation in observation_list:
-            if not self.checkbox_vars[observation].get():
+            if not self.grid.checkbox_vars[observation].get():
                 to_delete_list.append(observation)
 
         self.observations.remove_observations(to_delete_list)
         self.json.remove_damages_from_json(to_delete_list)
         self.json.load_json_from_file()
         self.update_observation_radiobuttons()
-        self.reload_grid_and_images()
+        self.grid.reload_grid_and_images()
 
     def close_window(self, stop=False):
         """Function to stop the program and signal the loop to exit."""
         self.json.save_json_to_file()
-        
+
         if self.stop_callback and stop:
             self.stop_callback()  # Call the stop callback to stop the loop
         self.destroy()
@@ -309,7 +325,7 @@ class ImageDisplayWindow(tk.Tk):
     def radio_button_value_changed(self):
         self.update_obj_id_to_selected_observation()
         self.init_sam_with_selected_observation()
-        self.reload_grid_and_images()
+        self.grid.reload_grid_and_images()
 
     def init_sam_with_selected_observation(self):
         points_dict = self.get_points_for_selected_observations()   # load points for selected observation from json
@@ -393,260 +409,11 @@ class ImageDisplayWindow(tk.Tk):
                 
         return points_dict
 
-    def reload_grid_and_images(self):
-        grid_size = int(self.grid_entry.get())
-
-        if grid_size < 1:
-            print(f"Error: Gridsize invalid: {grid_size}")
-            return
-
-        images_per_grid = grid_size * grid_size
-        slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
-        self.image_slider.config(from_=0, to=slider_max)
-        
-
-        self.show_selected_images()
-        
-    def get_canvas_info(self):
-        # Get canvas size
-        canvas_width = self.canvas.winfo_width()
-        canvas_height = self.canvas.winfo_height()
-
-        if canvas_width <= 0 or canvas_height <= 0:
-            return
-
-        try:
-            grid_size = int(self.grid_entry.get())
-        except ValueError:
-            print("Invalid input. Please enter a valid integer.")
-            return
-
-        if grid_size <= 0:
-            return
-
-        cell_width = canvas_width / grid_size
-        cell_height = canvas_height / grid_size
-
-        return cell_width, cell_height, grid_size
-
-    def show_selected_images(self, start_index = None):
-        """Displays images in a grid format on the canvas."""
-        if not self.initialized:
-            return
-        
-        if not start_index:
-            start_index = self.image_slider.get()
-
-        self.image_refs = []
-        
-
-        image_list = self.frame_info.get_frames()
-        image_names = self.frame_info.get_frame_name_list()
-
-        self.canvas.delete("all")
-        cell_width, cell_height, grid_size = self.get_canvas_info()
-
-        json_data = self.json.get_json()
-
-        for i in range(grid_size * grid_size):
-            index = int(start_index + i)
-
-            if index >= len(image_list):
-                break
-
-            img = image_list[index]
-            img_name = image_names[index]
-
-            # Add mask if available
-            if json_data:
-                for frame in json_data.values():
-                    if "File Name" not in frame:
-                        continue
-                    if img_name in frame["File Name"]:
-                        
-                        masked_img = self.draw_mask_on_image(img, frame)
-                        img = masked_img
-
-            # Resize the image
-            img = img.resize((int(cell_width), int(cell_height)), Image.Resampling.LANCZOS)
-            tk_img = ImageTk.PhotoImage(img)
-
-            self.image_refs.append(tk_img)
-
-            # Place the image on the canvas
-            row = i // grid_size
-            col = i % grid_size
-            x_position = col * cell_width
-            y_position = row * cell_height
-            self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
-
-    def draw_mask_on_image(self, img, frame):
-        # Define a set of colors for different mask.json files
-        colors = [
-            (255, 0, 0, 100),   # Red with transparency
-            (0, 0, 255, 100),   # Blue with transparency
-            (0, 255, 0, 100),   # Green with transparency
-            (255, 255, 0, 100), # Yellow with transparency
-            (255, 0, 255, 100)  # Magenta with transparency
-        ]
-
-
-        if frame["File Name"] in self.marked_frames:
-            # Draw Red border around image
-            # Assuming you want to add a red border around the image
-            border_thickness = 5
-            img_width, img_height = img.size
-            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            overlay_draw = ImageDraw.Draw(overlay)
-            overlay_draw.rectangle(
-                [(0, 0), (img_width, border_thickness)],
-                fill=(255, 0, 0, 255)  # Red color
-            )
-            overlay_draw.rectangle(
-                [(0, 0), (border_thickness, img_height)],
-                fill=(255, 0, 0, 255)  # Red color
-            )
-            overlay_draw.rectangle(
-                [(img_width - border_thickness, 0), (img_width, img_height)],
-                fill=(255, 0, 0, 255)  # Red color
-            )
-            overlay_draw.rectangle(
-                [(0, img_height - border_thickness), (img_width, img_height)],
-                fill=(255, 0, 0, 255)  # Red color
-            )
-            img = Image.alpha_composite(img.convert("RGBA"), overlay)
-
-
-
-        observation_list = self.observations.get_observation_list()
-
-        for kuerzel in observation_list:
-            # Create a transparent overlay for polygons
-            overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-            overlay_draw = ImageDraw.Draw(overlay, "RGBA")
-
-            if "Observations" not in frame:
-                return
-            if kuerzel in frame["Observations"]:
-                schaden_data = frame["Observations"][kuerzel]
-
-                if schaden_data.keys() is None:
-                    continue
-                # Check if "Mask Polygon" exists
-                if "Mask Polygon" in schaden_data:
-                    polygons = schaden_data["Mask Polygon"]
-                else:
-                    polygons = None
-
-                observation_index = observation_list.index(kuerzel)
-                color = colors[observation_index % len(colors)]
-
-                if self.checkbox_vars[kuerzel].get():
-                    # Draw polygons
-                    if polygons:
-                        for polygon in polygons:
-                            polygon_tuples = [tuple(point) for point in polygon]
-                            if len(polygon_tuples) > 3:
-                                overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
-
-                    # Call the new function to draw points and selection order
-                    if kuerzel == self.radio_var.get():
-                        self.draw_points_on_image(overlay_draw, schaden_data, img)
-
-            # Composite the overlay with the original image
-            if img.mode != "RGBA":
-                img = img.convert("RGBA")
-            img = Image.alpha_composite(img, overlay)
-            img = img.convert("RGB")
-
-        
-        return img
-
-    def draw_points_on_image(self, overlay_draw, schaden_data, img):
-        # Check if "Points" exists
-        if "Points" in schaden_data:
-            points = schaden_data["Points"]
-            pos_points = points.get("1", [])
-            neg_points = points.get("0", [])
-        else:
-            pos_points = None
-            neg_points = None
-
-        # Draw positive points (green circles)
-        if pos_points:
-            for point in pos_points:
-                x, y = point
-                radius = 5
-                overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(0, 255, 0, 255))
-
-        # Draw negative points (red circles)
-        if neg_points:
-            for point in neg_points:
-                x, y = point
-                radius = 5
-                overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 0, 0, 255))
-
-        # Draw yellow border if this is the first labeled image (selection order 0)
-        if "Selection Order" in schaden_data and schaden_data["Selection Order"] == 0:
-            border_thickness = 3
-            img_width, img_height = img.size
-            overlay_draw.rectangle(
-                [(border_thickness // 2, border_thickness // 2),
-                (img_width - border_thickness // 2, img_height - border_thickness // 2)],
-                outline=(255, 255, 0, 255),  # Yellow color
-                width=border_thickness
-            )
-
-    def slider_update(self, current_index):
-        """Update image display when the slider is moved."""
-        #current_index = self.image_slider.get()
-        self.show_selected_images(int(float(current_index)))
-
-    def prev_images(self):
-        """Go to the previous set of images."""
-        grid_size = int(self.grid_entry.get())
-        current_index = self.image_slider.get()
-        new_index = int(max(0, current_index - grid_size))
-        self.show_selected_images(new_index)
-        self.image_slider.set(new_index)  # Update slider
-
-    def next_images(self):
-        """Go to the next set of images."""
-        grid_size = int(self.grid_entry.get())
-        images_per_grid = grid_size * grid_size
-        current_index = self.image_slider.get()
-        max_value = len(self.frame_info.get_frame_name_list()) - images_per_grid
-        new_index = int(min(max_value, current_index + grid_size))
-        self.show_selected_images(new_index)
-        self.image_slider.set(new_index)  # Update slider
-
-    def mark_up_image(self, event):
-        """Handle right click events on the canvas."""
-        x, y = event.x, event.y
-        cell_width , cell_height, grid_size = self.get_canvas_info()
-        row = int(y // cell_height)
-        col = int(x // cell_width)
-        start_index = int(self.image_slider.get())
-        # Calculate the index of the clicked image
-        img_index = row * grid_size + col + start_index
-        print(f"Marked Image index: {img_index}")
-
-        shown_frame_names = self.frame_info.get_frame_name_list()
-        frame_name = shown_frame_names[img_index]
-
-        if frame_name in self.marked_frames:
-            self.marked_frames.remove(frame_name)
-        else:
-            self.marked_frames.append(frame_name)
-
-        print(self.marked_frames)
-        self.json.add_marked_frames_to_first_index(self.marked_frames)
-        self.reload_grid_and_images()
  
     def on_canvas_click(self, event):
         """Handle left click events on the canvas."""
         x, y = event.x, event.y
-        cell_width , cell_height, grid_size = self.get_canvas_info()
+        cell_width , cell_height, grid_size = self.grid.get_canvas_info()
 
         row = int(y // cell_height)
         col = int(x // cell_width)
@@ -659,7 +426,7 @@ class ImageDisplayWindow(tk.Tk):
         print(f"Clicked Image index: {index}")
         # Open the selected image in a new window and add points
         self.open_annotation_window_save_Coordinates(index)
-        self.reload_grid_and_images()
+        self.grid.reload_grid_and_images()
 
     def multithread_sam_progressbar(self):
         popup = tk.Toplevel()
@@ -818,14 +585,14 @@ class ImageDisplayWindow(tk.Tk):
         self.update_observation_radiobuttons()
         self.init_sam_with_selected_observation()
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
-        self.canvas.bind("<Button-3>", self.mark_up_image)  # Bind right click to canvas
+        self.canvas.bind("<Button-3>", self.grid.mark_up_image)  # Bind right click to canvas
         self.bind('<Key>', self.on_key_press)
         
 
         self.state("zoomed")    
         self.update_idletasks()
         self.update()
-        self.reload_grid_and_images()
+        self.grid.reload_grid_and_images()
         self.mainloop()
 
 if __name__ == "__main__":

@@ -109,8 +109,9 @@ def stop_process():
 
 if test_mode:
     # Using test_mode_setup values from config.yaml
-    current_frame_dir = config['test_mode_setup']['current_frame_dir']
-    video_path = config['test_mode_setup']['video_path']
+    dir_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    current_frame_dir = os.path.join(dir_path, config['test_mode_setup']['current_frame_dir'])
+    video_path = os.path.join(dir_path, config['test_mode_setup']['video_path'])
 
     extraction_successful = extract_frames_by_frame(input_path=video_path, 
                                                     output_path=current_frame_dir, 
@@ -174,7 +175,7 @@ else:
         create_json_with_info(current_frame_dir, frame_rate, damage_table.iloc[current_index])
 
         if auto_mode:
-            print()
+            print("Not Added Yet")
             # yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
         else:  
             # Segment manually
