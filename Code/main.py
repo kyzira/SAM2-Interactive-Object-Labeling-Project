@@ -15,7 +15,7 @@ with open(config_path, 'r') as config_file:
 # Configurable options for processing video frames from config.yaml
 auto_mode = config['mode'].get('auto_mode', False)  # Defaulting to False if not in config
 test_mode = config['mode'].get('test_mode', False)   # Fetching the test_mode from YAML
-view_mode = config["mode"].get("view_mode", False)
+folder_mode = config["mode"].get("folder_mode", False)
 frame_rate = config['test_mode_setup'].get('Extracted Frame Rate', 25)  # Fetching frame rate from test_mode setup
 
 add_obj_button_list = config.get("object_add_buttons", [])
@@ -138,7 +138,7 @@ if test_mode:
     )
     app.run()
 
-elif view_mode:
+elif folder_mode:
     while not stop_flag:
         app = ImageDisplayWindow(stop_callback=stop_process)
         app.run()

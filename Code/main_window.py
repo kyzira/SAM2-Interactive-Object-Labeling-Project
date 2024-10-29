@@ -36,7 +36,7 @@ class ImageDisplayWindow(tk.Tk):
 
         if not frame_dir:
             print("Frame Dir not given, switching to View Mode")
-            frame_dir = filedialog.askdirectory(title="Select the Labeled Info Directory")
+            frame_dir = filedialog.askdirectory(title="Select the Labeled Info Directory",initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
             # If the Video folder was given:
             if os.path.isdir(os.path.join(frame_dir, "source images")):
@@ -425,6 +425,12 @@ class ImageDisplayWindow(tk.Tk):
 
         print(f"Clicked Image index: {index}")
         # Open the selected image in a new window and add points
+        
+        observations = self.observations.get_observation_list()
+        if not len(observations):
+            print("No value selected or observation list empty!")
+            return
+        
         self.open_annotation_window_save_Coordinates(index)
         self.grid.reload_grid_and_images()
 

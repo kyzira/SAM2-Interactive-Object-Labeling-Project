@@ -5,7 +5,7 @@
 mode:
   list_mode : False  # Follows a Table and opens the next entry in the table, when you close the window
   test_mode : True # Opens the locally saved test_mode folder as its input
-  view_mode : False # View Mode enables a loop, to select a folder with the json and the original frames folder in it, and displays them, with their labeling
+  folder_mode : False # folder Mode enables a loop, to select a folder with the json and the original frames folder in it, and displays them, with their labeling
   auto_mode : False # Use a pretrained yolo model for labeling. NOT IMPLEMENTED YET!
 
 

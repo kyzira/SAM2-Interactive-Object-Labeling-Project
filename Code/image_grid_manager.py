@@ -1,4 +1,4 @@
-import tkinter as tk
+import threading
 from PIL import Image, ImageTk, ImageDraw
 
 class ImageGridManager:
@@ -16,17 +16,21 @@ class ImageGridManager:
         self.initialized = True  # Assuming the manager is initialized for demonstration
 
     def reload_grid_and_images(self):
-        grid_size = int(self.grid_entry.get())
 
-        if grid_size < 1:
-            print(f"Error: Gridsize invalid: {grid_size}")
-            return
+        def seperate_thread():
+            grid_size = int(self.grid_entry.get())
 
-        images_per_grid = grid_size * grid_size
-        slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
-        self.image_slider.config(from_=0, to=slider_max)
+            if grid_size < 1:
+                print(f"Error: Gridsize invalid: {grid_size}")
+                return
 
-        self.show_selected_images()
+            images_per_grid = grid_size * grid_size
+            slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
+            self.image_slider.config(from_=0, to=slider_max)
+
+            self.show_selected_images()
+
+        threading.Thread(target=seperate_thread).start()
 
     def get_canvas_info(self):
         # Get canvas size
