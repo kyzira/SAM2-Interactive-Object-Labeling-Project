@@ -3,7 +3,7 @@
 
 # Select the mode, the default mode is list mode. ONLY SET ONE MODE TO TRUE
 mode:
-  list_mode : False  # Follows a Table and opens the next entry in the table, when you close the window
+  list_mode : False   # Follows a Table and opens the next entry in the table, when you close the window
   test_mode : True # Opens the locally saved test_mode folder as its input
   folder_mode : False # folder Mode enables a loop, to select a folder with the json and the original frames folder in it, and displays them, with their labeling
   auto_mode : False # Use a pretrained yolo model for labeling. NOT IMPLEMENTED YET!
@@ -19,7 +19,7 @@ sam_model_paths:
 
 # These are the list mode paths
 default_paths:
-  output_path : C:\Code Python\SAM2-Interactive-Object-Labeling-Project\labeling_project
+  output_path : C:\Users\K3000\Desktop\Label Data
   table_path: C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
 
 

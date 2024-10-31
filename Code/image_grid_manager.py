@@ -1,4 +1,3 @@
-import threading
 from PIL import Image, ImageTk, ImageDraw
 
 class ImageGridManager:
@@ -16,21 +15,19 @@ class ImageGridManager:
         self.initialized = True  # Assuming the manager is initialized for demonstration
 
     def reload_grid_and_images(self):
+        grid_size = int(self.grid_entry.get())
 
-        def seperate_thread():
-            grid_size = int(self.grid_entry.get())
+        if grid_size < 1:
+            print(f"Error: Gridsize invalid: {grid_size}")
+            return
 
-            if grid_size < 1:
-                print(f"Error: Gridsize invalid: {grid_size}")
-                return
+        images_per_grid = grid_size * grid_size
+        slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
+        self.image_slider.config(from_=0, to=slider_max)
 
-            images_per_grid = grid_size * grid_size
-            slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
-            self.image_slider.config(from_=0, to=slider_max)
+        self.show_selected_images()
 
-            self.show_selected_images()
 
-        threading.Thread(target=seperate_thread).start()
 
     def get_canvas_info(self):
         # Get canvas size
@@ -263,4 +260,23 @@ class ImageGridManager:
 
         print(self.marked_frames)
         self.json.add_marked_frames_to_first_index(self.marked_frames)
+        self.reload_grid_and_images()
+
+
+    def delete_label(self, event):
+        """Handle right click events on the canvas."""
+        x, y = event.x, event.y
+        cell_width, cell_height, grid_size = self.get_canvas_info()
+        row = int(y // cell_height)
+        col = int(x // cell_width)
+        start_index = int(self.image_slider.get())
+        # Calculate the index of the clicked image
+        img_index = row * grid_size + col + start_index
+
+        image_names = self.frame_info.get_frame_name_list()
+        img_num = int(image_names[img_index].split(".")[0])   
+        kuerzel = self.radio_var.get()
+
+        self.json.remove_damages_from_json([kuerzel],frame_key=img_num)
+        print(f"Deleted Label for Image index: {img_index}")
         self.reload_grid_and_images()

@@ -90,20 +90,27 @@ class JsonReadWrite:
                 self.add_frame_to_json(frame_name=frame_name, observation=damage_name)
         self.save_json_to_file()
 
-    def remove_damages_from_json(self, damage_list):
-        # delete all entries of the given damages from json
+    def remove_damages_from_json(self, damage_list, frame_key=None):
+        # if a frame key is given, only in that frame will it be deleted, else it will be deleted from every frame
+
         if len(damage_list) < 1:
             print("Error: No Damages to be deleted")
             return  # Add return to avoid further execution when list is empty
         
         for damage in damage_list:
             print(f"Now deleting {damage}")
-            for frame in self.__json_data.values():
-                if "Observations" not in frame:
-                    continue
-                # Directly access frame instead of self.__json_data[frame]
+            print(frame_key)
+            if str(frame_key) in self.__json_data.keys():
+                frame = self.__json_data[str(frame_key)]
                 if damage in frame["Observations"].keys():
-                    del frame["Observations"][damage]  # Modify the frame directly
+                    del frame["Observations"][damage]
+            else:
+                for frame in self.__json_data.values():
+                    if "Observations" not in frame:
+                        continue
+                    # Directly access frame instead of self.__json_data[frame]
+                    if damage in frame["Observations"].keys():
+                        del frame["Observations"][damage]  # Modify the frame directly
         print(f"Successfully Deleted: {damage_list}")
         self.save_json_to_file()
             

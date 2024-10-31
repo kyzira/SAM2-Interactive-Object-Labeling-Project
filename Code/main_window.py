@@ -21,6 +21,7 @@ class ImageDisplayWindow(tk.Tk):
         self.geometry("1200x1000")
         self.images = []
         self.image_paths = []
+        self.sam_paths = sam_paths
         self.initialized = False
         self.video_path = video_path
         checkbox_vars = {}
@@ -74,21 +75,6 @@ class ImageDisplayWindow(tk.Tk):
         radio_frame = tk.Frame(self)
         radio_frame.pack(side="top", fill="x", padx=10, pady=5)
 
-        # Create a new frame to hold the label and entry vertically
-        option_frame = tk.Frame(radio_frame)
-        option_frame.pack(side="left")  # Pack this new frame to the left side of the main frame
-
-        # Add the label for the option on top
-        tk.Label(option_frame, text="Add option:").pack(side="top", padx=(0, 5))  # Pack the label on top
-
-        # Add the entry field below the label
-        self.new_option_entry = tk.Entry(option_frame, width=15)
-        self.new_option_entry.pack(side="top", padx=(0, 5))  # Pack the entry below the label
-
-        # Add button
-        add_button = ttk.Button(radio_frame, text="Add", command=self.read_option_and_clear_entry_field, padding=(10, 10))
-        add_button.pack(side="left", padx=(5, 0))
-
         # Radiobuttons container
         self.radio_container = tk.Frame(radio_frame)
         self.radio_container.pack(side="left", padx=10, pady=5)
@@ -112,6 +98,10 @@ class ImageDisplayWindow(tk.Tk):
         style = ttk.Style()
         style.configure("Custom.TButton", background="red")
 
+        # Add button
+        add_button = ttk.Button(button_frame, text="Add new <Text>", command=self.open_new_obj_window)
+        add_button.pack(side="left", padx=(5, 0))
+
         # Add the predefined Buttons
         if len(add_object_buttons) > 0:
             for obj in add_object_buttons:
@@ -119,8 +109,8 @@ class ImageDisplayWindow(tk.Tk):
                 button.pack(side="left", padx=(5, 0))
 
         # Button to delete labeling
-        self.delete_button = ttk.Button(button_frame, text="Delete unselected labels", command=self.delete_damage, style="Custom.TButton")
-        self.delete_button.pack(side="left", padx=(50))
+        self.delete_button = ttk.Button(button_frame, text="Delete unselected label objects", command=self.delete_damage, style="Custom.TButton")
+        self.delete_button.pack(side="left", padx=(80))
 
         # Initialize canvas
         self.canvas = tk.Canvas(self, width=1000, height=800, bg="white")
@@ -151,37 +141,49 @@ class ImageDisplayWindow(tk.Tk):
 
         # Short slider (10% of the window width)
         self.image_slider = ttk.Scale(input_frame, from_=0, to=0, orient="horizontal", command=self.grid.slider_update)
-        self.image_slider.pack(side="left", fill="x", expand=False, padx=(10, 5), ipadx=12)
+        self.image_slider.pack(side="left", fill="x", expand=False, padx=(10, 5), ipadx=24)
 
-        # Label for grid size
-        tk.Label(input_frame, text="Grid Size:").pack(side="left", padx=(0, 5))
+        self.more_images_forward = ttk.Button(input_frame, text="Extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
+        self.more_images_forward.pack(side="right", padx=(5, 0))
+
+        self.more_images_back = ttk.Button(input_frame, text="Extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
+        self.more_images_back.pack(side="right", padx=(5, 0))
+
+        # Button for reloading Model
+        self.button = ttk.Button(input_frame, text="Reload SAM2", command=self.reload_model)
+        self.button.pack(side="right", padx=(5, 0))
+
+        # Button for updating grid
+        self.button = ttk.Button(input_frame, text="Update Grid", command=self.grid.reload_grid_and_images)
+        self.button.pack(side="right", padx=(5, 0))
 
         # Entry field for grid size
         self.grid_entry = tk.Entry(input_frame, width=10)
         self.grid_entry.insert(0, "5")
-        self.grid_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self.grid_entry.pack(side="right", fill="x", expand=False, padx=(0, 5))
 
-        # Button for updating grid
-        self.button = ttk.Button(input_frame, text="Update Grid", command=self.grid.reload_grid_and_images)
-        self.button.pack(side="left", padx=(5, 0))
-
-        self.more_images_back = ttk.Button(input_frame, text="Extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
-        self.more_images_back.pack(side="left", padx=(5, 0))
-
-        self.more_images_forward = ttk.Button(input_frame, text="Extract next images", command=lambda: self.extract_images(self.video_path, forwards=True))
-        self.more_images_forward.pack(side="left", padx=(5, 0))
+        # Label for grid size
+        tk.Label(input_frame, text="Grid Size:").pack(side="right", padx=(0, 5))
 
         # After the grid instance is created, link the slider and grid entry
         self.grid.image_slider = self.image_slider  # Set the slider
         self.grid.grid_entry = self.grid_entry  # Set the grid entry
 
 
+    def reload_model(self):
+        # Saves Frame information, like the names, filepaths and so on
+        frame_dir = self.frame_info.frame_dir
+        self.frame_info = FrameInfoStruct(frame_dir)
 
+        # Loads and interacts with the SAM2 segmentation model
+        self.sam_model = Sam(frame_dir, self.sam_paths)
+        self.object_class_id = 0
+
+        self.grid.reload_grid_and_images()
     
 
     def extract_images(self, video_path, forwards):
         if self.initialized:
-            frame_dir = self.frame_info.frame_dir
             frame_extraction = LoadMoreFrames(self.frame_info)
 
             popup = tk.Toplevel()
@@ -208,9 +210,7 @@ class ImageDisplayWindow(tk.Tk):
             def check_thread():
                 if not extraction_thread.is_alive():
                     print("Resetting Sam now!")
-                    self.sam_model.init_predictor_state()
-                    self.init_sam_with_selected_observation()
-                    self.frame_info = FrameInfoStruct(frame_dir)
+                    self.reload_model()
                     self.image_slider.set(0)
                     self.grid.reload_grid_and_images()
                     progress.stop()
@@ -224,17 +224,42 @@ class ImageDisplayWindow(tk.Tk):
 
             check_thread()
 
-    def read_option_and_clear_entry_field(self, obj = None):
-        if obj:
-            to_add = obj
-        else:
-            to_add = self.new_option_entry.get().strip()
-
-        # Callback für den Button, um die neue Option hinzuzufügen.
-        self.observations.add_observation(to_add)
-        self.new_option_entry.delete(0, "end")
-        self.update_observation_radiobuttons()
+    def open_new_obj_window(self):
+        # Create new Toplevel window
+        self.new_window = tk.Toplevel(self)
+        self.new_window.title("Add Option")
         
+        # Create frame for label and entry
+        option_frame = tk.Frame(self.new_window)
+        option_frame.pack(padx=10, pady=10)
+
+        # Add label
+        tk.Label(option_frame, text="Add option:").pack(side="top", padx=(0, 5))
+        
+        # Entry field
+        self.new_option_entry = tk.Entry(option_frame, width=15)
+        self.new_option_entry.pack(side="top", padx=(0, 5))
+
+        # Add button
+        add_button = ttk.Button(self.new_window, text="Add", command=self.read_option_or_display_entry_field,  padding=(10, 0))
+        add_button.pack(side="top", pady=(5, 10))
+
+    def read_option_or_display_entry_field(self, obj=None):
+        # Check if obj is provided or use entry field value
+        to_add = obj if obj else self.new_option_entry.get().strip()
+        
+        # Add the new option to observations
+        self.observations.add_observation(to_add)
+        
+        # Clear entry field
+        self.new_option_entry.delete(0, "end")
+
+        if self.new_window:
+            self.new_window.destroy()
+        
+        self.update_observation_radiobuttons()
+
+    
     def update_obj_id_to_selected_observation(self):
         selected_option = self.radio_var.get()
         observation_list = self.observations.get_observation_list()
@@ -583,6 +608,8 @@ class ImageDisplayWindow(tk.Tk):
             self.next_images()
         elif event.keysym == "Left":
             self.prev_images()
+    
+
 
 
     def run(self):
@@ -592,6 +619,7 @@ class ImageDisplayWindow(tk.Tk):
         self.init_sam_with_selected_observation()
         self.canvas.bind("<Button-1>", self.on_canvas_click)  # Bind left click to canvas
         self.canvas.bind("<Button-3>", self.grid.mark_up_image)  # Bind right click to canvas
+        self.canvas.bind("<Button-2>", self.grid.delete_label)  # Bind mousewheel click to canvas
         self.bind('<Key>', self.on_key_press)
         
 

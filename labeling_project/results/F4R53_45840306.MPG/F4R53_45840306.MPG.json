@@ -2,9 +2,217 @@
     "Info": {
         "Video Path": "\\\\192.168.200.8\\Datengrab\\Dorr\\08-19-04-20\\Fa. S\u00fcdplanken\\A7, Nersingen, Lonetal vom 02.12.-18.12.2019\\Sichtversion 001\\bin\\F4R53_45840306.MPG",
         "Extracted Frame Rate": 25,
+        "Inspektions-ID": 5081,
         "Videoname": "F4R53_45840306.MPG",
+        "Rohrmaterial": "Beton",
+        "Inspekteur-Name": "Dorr/BeG\u00fc",
+        "Rohrprofil": "Kreisprofil",
+        "Rohrh\u00f6he (mm)": 500,
+        "Rohrbreite (mm)": 500,
+        "Videohash": 948456619,
         "Documented Observations": [
-            "Connections, at 00:03:36"
-        ]
+            "BCADA, at 00:03:39"
+        ],
+        "Marked Frames": []
+    },
+    "4900": {
+        "File Name": "04900.jpg",
+        "Observations": {}
+    },
+    "4925": {
+        "File Name": "04925.jpg",
+        "Observations": {}
+    },
+    "4950": {
+        "File Name": "04950.jpg",
+        "Observations": {}
+    },
+    "4975": {
+        "File Name": "04975.jpg",
+        "Observations": {}
+    },
+    "5000": {
+        "File Name": "05000.jpg",
+        "Observations": {}
+    },
+    "5025": {
+        "File Name": "05025.jpg",
+        "Observations": {}
+    },
+    "5050": {
+        "File Name": "05050.jpg",
+        "Observations": {}
+    },
+    "5075": {
+        "File Name": "05075.jpg",
+        "Observations": {}
+    },
+    "5100": {
+        "File Name": "05100.jpg",
+        "Observations": {}
+    },
+    "5125": {
+        "File Name": "05125.jpg",
+        "Observations": {}
+    },
+    "5150": {
+        "File Name": "05150.jpg",
+        "Observations": {}
+    },
+    "5175": {
+        "File Name": "05175.jpg",
+        "Observations": {}
+    },
+    "5200": {
+        "File Name": "05200.jpg",
+        "Observations": {}
+    },
+    "5225": {
+        "File Name": "05225.jpg",
+        "Observations": {}
+    },
+    "5250": {
+        "File Name": "05250.jpg",
+        "Observations": {}
+    },
+    "5275": {
+        "File Name": "05275.jpg",
+        "Observations": {}
+    },
+    "5300": {
+        "File Name": "05300.jpg",
+        "Observations": {}
+    },
+    "5325": {
+        "File Name": "05325.jpg",
+        "Observations": {}
+    },
+    "5350": {
+        "File Name": "05350.jpg",
+        "Observations": {}
+    },
+    "5375": {
+        "File Name": "05375.jpg",
+        "Observations": {}
+    },
+    "5400": {
+        "File Name": "05400.jpg",
+        "Observations": {}
+    },
+    "5425": {
+        "File Name": "05425.jpg",
+        "Observations": {}
+    },
+    "5450": {
+        "File Name": "05450.jpg",
+        "Observations": {}
+    },
+    "5475": {
+        "File Name": "05475.jpg",
+        "Observations": {}
+    },
+    "5500": {
+        "File Name": "05500.jpg",
+        "Observations": {}
+    },
+    "5525": {
+        "File Name": "05525.jpg",
+        "Observations": {}
+    },
+    "5550": {
+        "File Name": "05550.jpg",
+        "Observations": {}
+    },
+    "5575": {
+        "File Name": "05575.jpg",
+        "Observations": {}
+    },
+    "5600": {
+        "File Name": "05600.jpg",
+        "Observations": {}
+    },
+    "5625": {
+        "File Name": "05625.jpg",
+        "Observations": {}
+    },
+    "5650": {
+        "File Name": "05650.jpg",
+        "Observations": {}
+    },
+    "5675": {
+        "File Name": "05675.jpg",
+        "Observations": {}
+    },
+    "5700": {
+        "File Name": "05700.jpg",
+        "Observations": {}
+    },
+    "4875": {
+        "File Name": "04875.jpg",
+        "Observations": {}
+    },
+    "4850": {
+        "File Name": "04850.jpg",
+        "Observations": {}
+    },
+    "4825": {
+        "File Name": "04825.jpg",
+        "Observations": {}
+    },
+    "4800": {
+        "File Name": "04800.jpg",
+        "Observations": {}
+    },
+    "4775": {
+        "File Name": "04775.jpg",
+        "Observations": {}
+    },
+    "4750": {
+        "File Name": "04750.jpg",
+        "Observations": {}
+    },
+    "4725": {
+        "File Name": "04725.jpg",
+        "Observations": {}
+    },
+    "4700": {
+        "File Name": "04700.jpg",
+        "Observations": {}
+    },
+    "4675": {
+        "File Name": "04675.jpg",
+        "Observations": {}
+    },
+    "4650": {
+        "File Name": "04650.jpg",
+        "Observations": {}
+    },
+    "4625": {
+        "File Name": "04625.jpg",
+        "Observations": {}
+    },
+    "4600": {
+        "File Name": "04600.jpg",
+        "Observations": {}
+    },
+    "4575": {
+        "File Name": "04575.jpg",
+        "Observations": {}
+    },
+    "4550": {
+        "File Name": "04550.jpg",
+        "Observations": {}
+    },
+    "4525": {
+        "File Name": "04525.jpg",
+        "Observations": {}
+    },
+    "4500": {
+        "File Name": "04500.jpg",
+        "Observations": {}
+    },
+    "4475": {
+        "File Name": "04475.jpg",
+        "Observations": {}
     }
 }
