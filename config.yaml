@@ -24,7 +24,7 @@ default_paths:
 
 settings:
   scroll_speed : 1        # How many images to load when scrolling mousewheel on grid
-  default_grid_size : 4   # If set to 0: default to loading maximum, if set to any other number, set grid to that size
+  default_grid_size : 0   # If set to 0: default to loading maximum, if set to any other number, set grid to that size
 
   
 # Put in here the columns, which then can be saved in your result jsons

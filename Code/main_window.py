@@ -5,8 +5,9 @@ from sam2_class import Sam
 from json_read_write import JsonReadWrite 
 from frame_info_struct import FrameInfoStruct 
 from further_extract_frames import LoadMoreFrames
+from extract_frames_from_video import extract_frames_by_frame
 import os
-import threading
+from extraction_video_interface import VideoPlayer
 from annotation_window import AnnotationWindow
 import cv2
 import numpy as np
@@ -168,6 +169,9 @@ class ImageDisplayWindow(tk.Tk):
         self.more_images_back = ttk.Button(input_frame, text="Extract previous images", command=lambda: self.extract_images(self.video_path, forwards=False))
         self.more_images_back.pack(side="right", padx=(5, 0))
 
+        self.more_images_back = ttk.Button(input_frame, text="Extract from Video", command=self.extract_from_video)
+        self.more_images_back.pack(side="right", padx=(5, 0))
+
         # Button for reloading Model
         self.button = ttk.Button(input_frame, text="Reload SAM2", command=self.reload_model)
         self.button.pack(side="right", padx=(5, 0))
@@ -208,6 +212,40 @@ class ImageDisplayWindow(tk.Tk):
         self.object_class_id = 0
 
         self.grid.reload_grid_and_images()
+
+    def extract_from_video(self):
+        if self.initialized:
+            frame_dir = self.frame_info.frame_dir
+
+            start_frame = int(self.frame_info.get_frame_name_list()[0].split(".")[0])
+            video_window = tk.Toplevel(self)
+            video_window.title("Video Player")
+            player = VideoPlayer(video_window, self.video_path, start_frame)
+            self.wait_window(video_window)
+            start_frame, end_frame = player.get_start_and_end_frame()
+
+            if start_frame == None or end_frame == None:
+                return
+
+            for file in os.listdir(frame_dir):
+                file_path = os.path.join(frame_dir, file)
+                try:
+                    if os.path.isfile(file_path):  # Check if it's a file
+                        os.remove(file_path)
+                except Exception as e:
+                    print(f"Error deleting file {file_path}: {e}")
+                    
+            extract_frames_by_frame(self.video_path, self.frame_info.frame_dir, start_frame, end_frame, frame_rate=25)
+
+            print("Resetting Sam now!")
+            self.reload_model()
+            self.image_slider.set(0)
+
+            frame_dir = self.frame_info.frame_dir
+            self.frame_info = FrameInfoStruct(frame_dir)
+            self.grid.frame_info = self.frame_info
+            self.grid.reload_grid_and_images()
+
     
 
     def extract_images(self, video_path, forwards):

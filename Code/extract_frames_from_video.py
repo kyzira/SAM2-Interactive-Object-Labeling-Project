@@ -1,5 +1,33 @@
 import os
 import cv2
+from skimage.metrics import structural_similarity as ssim
+
+
+def check_for_similarity(frame1, frame2, threshold=0.8):
+    """
+    Compares two frames and checks for similarity.
+
+    Args:
+        frame1: The first frame (image).
+        frame2: The second frame (image).
+        threshold: The similarity threshold (default is 0.95).
+
+    Returns:
+        bool: True if the frames are similar (above threshold), False otherwise.
+    """
+    # Resize frames to the same size if necessary
+    if frame1.shape != frame2.shape:
+        frame1 = cv2.resize(frame1, (frame2.shape[1], frame2.shape[0]))
+
+    # Convert frames to grayscale for SSIM comparison
+    gray_frame1 = cv2.cvtColor(frame1, cv2.COLOR_BGR2GRAY)
+    gray_frame2 = cv2.cvtColor(frame2, cv2.COLOR_BGR2GRAY)
+
+    # Compute SSIM between the two frames
+    similarity_index = ssim(gray_frame1, gray_frame2)
+
+    print(f"SSIM: {similarity_index}")
+    return similarity_index > threshold
 
 def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, end_frame=None, frame_rate=1):
     """
@@ -32,6 +60,8 @@ def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, en
         output_path = os.path.join(input_dir, f"{base_name}")
         print(f"Error: Output path is empty!\nSaving Images in: {output_path}")
         
+    last_frame = None
+
     frame_dir = output_path
     os.makedirs(frame_dir, exist_ok=True)
 
@@ -61,9 +91,15 @@ def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, en
             print(f"Failed to read frame {frame_number}.")
             break
 
+        if last_frame is not None and check_for_similarity(last_frame, frame):
+            print(f"Frame {frame_number} is similar to the last saved frame. Skipping...")
+            continue
+
         output_filename = os.path.join(frame_dir, f'{frame_number:05d}.jpg')
         cv2.imwrite(output_filename, frame)
         print(f"Saved frame {frame_number} to {output_filename}")
+
+        last_frame = frame
 
     cap.release()
     print(f"Frames have been saved to {frame_dir}.")
@@ -101,6 +137,7 @@ def extract_frames_by_damage_time(input_path: str, output_path: str, damage_seco
         output_path = os.path.join(input_dir, f"{base_name}")
         print(f"Error: Output path is empty!\nSaving Images in: {output_path}")
         
+    last_frame = None
 
     frame_dir = output_path
     os.makedirs(frame_dir, exist_ok=True)
@@ -135,10 +172,17 @@ def extract_frames_by_damage_time(input_path: str, output_path: str, damage_seco
         if not ret:
             print(f"Failed to read frame {frame_number}.")
             break
+        
+        if last_frame is not None and check_for_similarity(last_frame, frame):
+            print(f"Frame {frame_number} is similar to the last saved frame. Skipping...")
+            continue
 
         output_filename = os.path.join(frame_dir, f'{frame_number:05d}.jpg')
         cv2.imwrite(output_filename, frame)
         print(f"Saved frame {frame_number} to {output_filename}")
+
+        last_frame = frame
+
 
     cap.release()
     print(f"Frames have been saved to {frame_dir}.")
