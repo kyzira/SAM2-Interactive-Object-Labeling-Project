@@ -38,6 +38,9 @@ class FrameInfoStruct:
 
     def get_frames(self):
         return self.__frames
+    
+    def get_amount_of_frames(self):
+        return len(self.__frame_names)
 
     def __extract_info(self):
         for file in os.listdir(self.frame_dir):

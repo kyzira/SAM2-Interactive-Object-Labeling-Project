@@ -2,7 +2,7 @@ import os
 import pandas as pd
 from extract_frames_from_video import extract_frames_by_damage_time, extract_frames_by_frame
 from main_window import ImageDisplayWindow
-import json
+from json_read_write import JsonReadWrite
 import numpy as np
 import yaml
 
@@ -58,48 +58,24 @@ def increment_and_save_current_index(current_index):
     with open(index_path, "w") as file:
         file.write(str(current_index))
 
-def create_json_with_info(current_frame_dir: str, frame_rate: int, damage_table_at_index: pd.Series):
+def create_json_with_info(current_frame_dir: str, frame_rate: int, video_path: str, damage_table_at_index: dict):
     """
     Creates a JSON file containing metadata about the video frames and stores it in the frame directory.
     """
     dir_path = os.path.dirname(current_frame_dir)
+    damage_table = damage_table_at_index.copy()
+    damage_table["frame_rate"] = frame_rate
+    damage_table["config"] = config
+    damage_table["video_path"] = video_path
     json_path = os.path.join(dir_path, f"{str(os.path.basename(dir_path))}.json")
-    if os.path.exists(json_path):
-        with open(json_path, "r") as file:
-            json_file = json.load(file)
-    else:
-        json_file = dict()
     
-    observation_name_and_time = f"{damage_table_at_index['Label']}, at {damage_table_at_index['Videozeitpunkt (h:min:sec)']}"
+    json = JsonReadWrite(json_path=json_path, info_table=damage_table)
+    if json.get_load_successful() == 0:
+        skip = json.json_read_failed()
+        return skip
 
-    # Convert Pandas-specific types to Python types
-    damage_info_converted = damage_table_at_index.apply(lambda x: int(x) if isinstance(x, (np.int64, np.int32)) else x)
 
-    # Create a list of relevant keys from config.yaml
-    keys_to_include = config['default_table_columns']
 
-    # Check if "Info" is present in the JSON
-    if "Info" in json_file:
-        # Check if the observation has already been documented
-        if observation_name_and_time in json_file["Info"]["Documented Observations"]:
-            return
-        else:
-            json_file["Info"]["Documented Observations"].append(observation_name_and_time)
-    else:
-        # Initialize the "Info" dictionary
-        json_file["Info"] = {}
-        json_file["Info"]["Video Path"] = video_path  # `video_path` needs to be defined in the scope
-        json_file["Info"]["Extracted Frame Rate"] = frame_rate
-        
-        for key in keys_to_include:
-            if key in damage_info_converted:
-                json_file["Info"][key] = damage_info_converted[key]
-        
-        json_file["Info"]["Documented Observations"] = [observation_name_and_time]
-
-    # Write the JSON to the file
-    with open(json_path, "w") as outfile:
-        json.dump(json_file, outfile, indent=4)
 
 def stop_process():
     global stop_flag
@@ -120,38 +96,43 @@ if test_mode:
                                                     end_frame=2000)
 
     # Using test_mode_table values from config.yaml
-    damage_table = pd.Series(config['test_mode_table'])
+    damage_dict = config['test_mode_table']
 
     # Create JSON with test numbers
-    create_json_with_info(current_frame_dir, frame_rate, damage_table)
+    skip = create_json_with_info(current_frame_dir, frame_rate, video_path, damage_dict)
 
-    window_title = damage_table['Label']
-    app = ImageDisplayWindow(
-        frame_dir=current_frame_dir, 
-        video_path=video_path, 
-        frame_rate=frame_rate, 
-        schadens_kurzel=damage_table['Label'],
-        window_title=window_title, 
-        stop_callback=stop_process,
-        sam_paths=sam_paths,
-        add_object_buttons=add_obj_button_list
-    )
-    app.run()
+    if not skip:
+        window_title = damage_dict['Label']
+        app = ImageDisplayWindow(
+            frame_dir=current_frame_dir, 
+            video_path=video_path, 
+            frame_rate=frame_rate, 
+            schadens_kurzel=damage_dict['Label'],
+            window_title=window_title, 
+            stop_callback=stop_process,
+            sam_paths=sam_paths,
+            add_object_buttons=add_obj_button_list,
+            settings=config["settings"]
+        )
+        app.run()
 
 elif folder_mode:
     while not stop_flag:
-        app = ImageDisplayWindow(stop_callback=stop_process)
+        app = ImageDisplayWindow(stop_callback=stop_process,
+                                 settings=config["settings"])
         app.run()
 else:
     current_index = get_current_index()
     while current_index <= total_length and not stop_flag: 
         current_index = get_current_index()
 
+        damage_dict = damage_table.iloc[current_index].to_dict()
+
         # Prepare everything
-        current_video_name = damage_table.iloc[current_index]['Videoname']
-        schadens_kurzel = str(damage_table.iloc[current_index]["Label"])
-        video_path = damage_table.iloc[current_index]['Videopfad']
-        damage_time = damage_table.iloc[current_index]['Videozeitpunkt (h:min:sec)']
+        current_video_name = damage_dict['Videoname']
+        schadens_kurzel = str(damage_dict["Label"])
+        video_path = damage_dict['Videopfad']
+        damage_time = damage_dict['Videozeitpunkt (h:min:sec)']
         
 
 
@@ -172,8 +153,12 @@ else:
             increment_and_save_current_index(current_index)
             continue
 
-        create_json_with_info(current_frame_dir, frame_rate, damage_table.iloc[current_index])
+        skip = create_json_with_info(current_frame_dir, frame_rate, video_path, damage_dict)
+        increment_and_save_current_index(current_index)
 
+        if skip:
+            continue
+        
         if auto_mode:
             print("Not Added Yet")
             # yolo.main(frame_dir=current_frame_dir, schadens_kurzel=schadens_kurzel)
@@ -188,8 +173,7 @@ else:
                 schadens_kurzel=schadens_kurzel, 
                 stop_callback=stop_process,
                 sam_paths=sam_paths,
-                add_object_buttons=add_obj_button_list
+                add_object_buttons=add_obj_button_list,
+                settings=config["settings"]
             )
             app.run()
-
-        increment_and_save_current_index(current_index)

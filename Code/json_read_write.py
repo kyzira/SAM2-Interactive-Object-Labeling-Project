@@ -1,13 +1,57 @@
 import json
 import os
-
+import tkinter as tk
 
 class JsonReadWrite:
-    def __init__(self, json_path):
+    def __init__(self, json_path, info_table={}):
         self.__json_data = dict()
         self.json_path = json_path
-        self.load_json_from_file()
+        self.info_table = info_table
+        self.success = self.load_json_from_file()
+        
+    def json_read_failed(self):
+        # Initialize skip as a mutable container (list) to allow modification inside nested functions
+        skip = [False]
 
+        def on_skip_button_click():
+            skip[0] = True  # Update the mutable skip variable
+            root.destroy()  # Close the tkinter window
+
+        def on_delete_button_click():
+            try:
+                os.remove(self.json_path)  # Attempt to delete the JSON file
+                self.__json_data = {}  # Reset JSON data to avoid errors when trying to access it
+                self.load_json_from_file()  # Reload the JSON file after deletion
+            except Exception as e:
+                print(f"Error deleting JSON file: {e}")  # Handle any deletion errors
+            root.destroy()  # Close the tkinter window
+
+        # Set up tkinter window
+        root = tk.Tk()
+        root.title("Json Read Failed")  # Title of the window
+        root.geometry("400x130")  # Size of the window
+
+        # Create a text label
+        label = tk.Label(root, text="The Json file couldn't be read. It may be broken or corrupt")
+        label.pack(pady=10)  # Add some vertical padding
+
+        # Create the first button
+        button1 = tk.Button(root, text="Skip to next Entry", command=on_skip_button_click)
+        button1.pack(pady=5)  # Add some vertical padding
+
+        # Create the second button
+        button2 = tk.Button(root, text="Delete Json and create new", command=on_delete_button_click)
+        button2.pack(pady=5)  # Add some vertical padding
+
+        # Run the application
+        root.mainloop()  # Start the tkinter event loop
+
+        return skip[0]  # Return the value of skip
+
+
+    def get_load_successful(self):
+        return self.success
+    
     def get_json(self):
         return self.__json_data
         
@@ -73,10 +117,35 @@ class JsonReadWrite:
             coordinates_dict["Points"]["1"] = pos_points
         if neg_points:
             coordinates_dict["Points"]["0"] = neg_points
+            
+    def create_info(self, damage_table):
+        observation_name_and_time = f"{damage_table['Label']}, at {damage_table['Videozeitpunkt (h:min:sec)']}"
+        # Create a list of relevant keys from config.yaml
+        keys_to_include = damage_table["config"]['default_table_columns']
 
-        
-        if (pos_points or neg_points) and not selection_order:
-            print("Index is not set despite pos_points or neg_points is set")
+        # Check if "Info" is present in the JSON
+        if "Info" in self.__json_data:
+            # Check if the observation has already been documented
+            if observation_name_and_time in self.__json_data["Info"]["Documented Observations"]:
+                return
+            else:
+                self.__json_data["Info"]["Documented Observations"].append(observation_name_and_time)
+        else:
+            # Initialize the "Info" dictionary
+            self.__json_data["Info"] = {}
+            self.__json_data["Info"]["Video Path"] = damage_table["video_path"]  # `video_path` needs to be defined in the scope
+            self.__json_data["Info"]["Extracted Frame Rate"] = damage_table["frame_rate"]
+            
+            for key in keys_to_include:
+                if key in damage_table:
+                    self.__json_data["Info"][key] = damage_table[key]
+            self.__json_data["Info"]["Documented Observations"] = [observation_name_and_time]
+        self.save_json_to_file()
+
+    def add_to_info(self, key, value):
+        if "Info" in self.__json_data:
+            self.__json_data["Info"][key] = value
+            self.save_json_to_file()
 
     def prepare_json_with_frames(self, frame_name_list, damage_list):
         # This function prepares the json with the given frames and damages
@@ -123,12 +192,18 @@ class JsonReadWrite:
 
     def load_json_from_file(self):
         if os.path.exists(self.json_path):
-            with open(self.json_path, "r") as file:
-                self.__json_data = json.load(file)
+            try:
+                with open(self.json_path, "r") as file:
+                    self.__json_data = json.load(file)
+                return 1
+            except:
+                return 0
         else:
-            print("Error: file does not exist! Creating emtpy .json")
+            print("Creating json!")
             self.__json_data = dict()
             self.save_json_to_file()
+            if self.info_table != {}:
+                self.create_info(self.info_table)
 
     def add_marked_frames_to_first_index(self, frames_list: list[str]):
         self.__json_data["Info"]["Marked Frames"] = frames_list

@@ -11,16 +11,15 @@ from annotation_window import AnnotationWindow
 import cv2
 import numpy as np
 from image_grid_manager import ImageGridManager
+import math
 
 
 class ImageDisplayWindow(tk.Tk):
-    def __init__(self, frame_dir=None, video_path=None, frame_rate=None, window_title="View Mode", schadens_kurzel=None, stop_callback=None, sam_paths=dict(), add_object_buttons=[]):
+    def __init__(self, frame_dir=None, video_path=None, frame_rate=None, window_title="View Mode", schadens_kurzel=None, stop_callback=None, sam_paths=dict(), add_object_buttons=[], settings={}):
         super().__init__()
 
         self.title(window_title)
         self.geometry("1200x1000")
-        self.images = []
-        self.image_paths = []
         self.sam_paths = sam_paths
         self.initialized = False
         self.video_path = video_path
@@ -32,6 +31,10 @@ class ImageDisplayWindow(tk.Tk):
             "Geometry": None
         }
 
+        # Loading Settings
+        default_grid_size = settings.get("default_grid_size", 0)
+        self.scroll_speed = settings.get("scroll_speed", 1)
+        
         # Stores the observations
         self.observations = observation_management.RadioButtonManagement()
 
@@ -39,13 +42,21 @@ class ImageDisplayWindow(tk.Tk):
             print("Frame Dir not given, switching to View Mode")
             frame_dir = filedialog.askdirectory(title="Select the Labeled Info Directory",initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
+            if not frame_dir:
+                # If File Dialog had an error
+                print("Error: No File Path!")
+                return 
+            
             # If the Video folder was given:
             if os.path.isdir(os.path.join(frame_dir, "source images")):
                 frame_dir = os.path.join(frame_dir, "source images")
 
             # If neither the Video folder was given, nor the source images folder then quit
             elif os.path.basename(frame_dir) != "source images":
-                return
+                return 
+
+
+        
 
         # Saves Frame information, like the names, filepaths and so on
         self.frame_info = FrameInfoStruct(frame_dir)
@@ -58,6 +69,11 @@ class ImageDisplayWindow(tk.Tk):
         # Initializes the json storage file and reads it, if it exists
         json_path = os.path.join(self.frame_info.working_dir, f"{str(os.path.basename(self.frame_info.working_dir))}.json")
         self.json = JsonReadWrite(json_path)
+        if self.json.get_load_successful() == 0:
+            skip = self.json.json_read_failed()
+            if skip:
+                self.destroy()
+        
         self.marked_frames = self.json.get_marked_frames_from_first_index()
 
         if schadens_kurzel:
@@ -83,12 +99,15 @@ class ImageDisplayWindow(tk.Tk):
         self.wait_label.pack(side="left", padx=10, pady=5)
 
         # Button to skip to next label
-        self.more_images_forward = ttk.Button(radio_frame, text="Next", command=self.close_window, padding=(10, 10))
-        self.more_images_forward.pack(side="right", padx=(5, 5))
+        self.next_button = ttk.Button(radio_frame, text="Next", command=self.close_window, padding=(10, 10))
+        self.next_button.pack(side="right", padx=(5, 5))
 
         # Button to stop labeling
-        self.finish_button = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(n), padding=(10, 10))
+        self.finish_button = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(stop=n), padding=(10, 10))
         self.finish_button.pack(side="right", padx=(5, 5))
+
+        self.skip_button = ttk.Button(radio_frame, text="Skip", command=lambda n=True: self.close_window(skip=n), padding=(10, 10))
+        self.skip_button.pack(side="right", padx=(5, 5))
 
         # Separate Frame for the Buttons
         button_frame = tk.Frame(self)
@@ -105,7 +124,7 @@ class ImageDisplayWindow(tk.Tk):
         # Add the predefined Buttons
         if len(add_object_buttons) > 0:
             for obj in add_object_buttons:
-                button = ttk.Button(button_frame, text=f"Add new {obj}", command=lambda n=obj: self.read_option_and_clear_entry_field(n))
+                button = ttk.Button(button_frame, text=f"Add new {obj}", command=lambda n=obj: self.read_option_or_display_entry_field(n))
                 button.pack(side="left", padx=(5, 0))
 
         # Button to delete labeling
@@ -159,7 +178,15 @@ class ImageDisplayWindow(tk.Tk):
 
         # Entry field for grid size
         self.grid_entry = tk.Entry(input_frame, width=10)
-        self.grid_entry.insert(0, "5")
+
+        grid_size = None
+        if default_grid_size == 0:
+            frame_names = self.frame_info.get_frame_name_list()
+            grid_size = str(int(math.sqrt(len(frame_names))))
+        else:
+            grid_size = default_grid_size
+
+        self.grid_entry.insert(0, int(grid_size))
         self.grid_entry.pack(side="right", fill="x", expand=False, padx=(0, 5))
 
         # Label for grid size
@@ -168,6 +195,7 @@ class ImageDisplayWindow(tk.Tk):
         # After the grid instance is created, link the slider and grid entry
         self.grid.image_slider = self.image_slider  # Set the slider
         self.grid.grid_entry = self.grid_entry  # Set the grid entry
+
 
 
     def reload_model(self):
@@ -197,32 +225,30 @@ class ImageDisplayWindow(tk.Tk):
             progress.pack(pady=10)
             progress.start()  # Start the progress bar animation
 
-            # Function to perform the extraction in a separate thread
-            def extraction():
-                if forwards:
-                    frame_extraction.extract_forwards(video_path, 10)
-                else:
-                    frame_extraction.extract_backwards(video_path, 10)
+            popup.update()
 
-                print("frames have been extracted! Continue resetting Sam")
+            # Perform the extraction directly without threading
+            if forwards:
+                frame_extraction.extract_forwards(video_path, 10)
+            else:
+                frame_extraction.extract_backwards(video_path, 10)
 
-            # Function to check if the thread is done
-            def check_thread():
-                if not extraction_thread.is_alive():
-                    print("Resetting Sam now!")
-                    self.reload_model()
-                    self.image_slider.set(0)
-                    self.grid.reload_grid_and_images()
-                    progress.stop()
-                    popup.destroy()  # Close the popup when extraction is done
-                else:
-                    popup.after(100, check_thread)  # Check again after 100ms
+            print("frames have been extracted! Continue resetting Sam")
 
-            # Start the extraction thread
-            extraction_thread = threading.Thread(target=extraction)
-            extraction_thread.start()
+            # Continue with resetting Sam
+            print("Resetting Sam now!")
+            self.reload_model()
+            self.image_slider.set(0)
 
-            check_thread()
+            frame_dir = self.frame_info.frame_dir
+            self.frame_info = FrameInfoStruct(frame_dir)
+            self.grid.frame_info = self.frame_info
+            self.grid.reload_grid_and_images()
+
+            # Stop the progress bar and close the popup
+            progress.stop()
+            popup.destroy()
+
 
     def open_new_obj_window(self):
         # Create new Toplevel window
@@ -239,25 +265,31 @@ class ImageDisplayWindow(tk.Tk):
         # Entry field
         self.new_option_entry = tk.Entry(option_frame, width=15)
         self.new_option_entry.pack(side="top", padx=(0, 5))
+        self.new_option_entry.focus()
+
+        # Enter Key Press
+        self.new_window.bind("<Return>", lambda event: self.add_entry_field_text())
 
         # Add button
-        add_button = ttk.Button(self.new_window, text="Add", command=self.read_option_or_display_entry_field,  padding=(10, 0))
+        add_button = ttk.Button(self.new_window, text="Add", command=self.add_entry_field_text,  padding=(10, 0))
         add_button.pack(side="top", pady=(5, 10))
 
-    def read_option_or_display_entry_field(self, obj=None):
-        # Check if obj is provided or use entry field value
-        to_add = obj if obj else self.new_option_entry.get().strip()
+    def add_entry_field_text(self):
+        if self.new_option_entry:
+            obj = self.new_option_entry.get()
+            if self.new_window:
+                self.new_window.destroy()
+            self.read_option_or_display_entry_field(obj)
         
-        # Add the new option to observations
-        self.observations.add_observation(to_add)
-        
-        # Clear entry field
-        self.new_option_entry.delete(0, "end")
 
-        if self.new_window:
-            self.new_window.destroy()
-        
-        self.update_observation_radiobuttons()
+
+    def read_option_or_display_entry_field(self, obj):
+        # Check if obj is provided or use entry field value
+        if not obj: 
+            print("Error: No Object given to add!")
+        # Add the new option to observations
+        self.observations.add_observation(obj)
+        self.update_observation_radiobuttons(reset_selection=False)
 
     
     def update_obj_id_to_selected_observation(self):
@@ -281,7 +313,7 @@ class ImageDisplayWindow(tk.Tk):
                     observation_list.append(key)
                     self.observations.add_observation(key)
 
-    def update_observation_radiobuttons(self):
+    def update_observation_radiobuttons(self, reset_selection=True):
         # Define the colors for the radio buttons (matching overlay colors)
         colors = [
             (255, 100, 100),   # Red
@@ -322,9 +354,15 @@ class ImageDisplayWindow(tk.Tk):
             self.grid.checkbox_vars[option] = check_var
 
         # Set the default selection to the first option
-        if observation_list:
+        if not observation_list:
+            return
+        
+        if reset_selection:
             if not self.radio_var.get() or len(self.radio_var.get())>1:
                 self.radio_var.set(observation_list[0])
+        else:
+            self.radio_var.set(observation_list[-1])
+
 
     def delete_damage(self):
         to_delete_list = []
@@ -335,13 +373,19 @@ class ImageDisplayWindow(tk.Tk):
 
         self.observations.remove_observations(to_delete_list)
         self.json.remove_damages_from_json(to_delete_list)
-        self.json.load_json_from_file()
-        self.update_observation_radiobuttons()
+
+        json_path = self.json.json_path
+        self.json = JsonReadWrite(json_path)
+
+        self.update_observation_radiobuttons(reset_selection=True)
         self.grid.reload_grid_and_images()
 
-    def close_window(self, stop=False):
+    def close_window(self, stop=False, skip=False):
         """Function to stop the program and signal the loop to exit."""
-        self.json.save_json_to_file()
+        if not skip:
+            self.json.save_json_to_file()
+        else:
+            self.json.add_to_info(key="Skipped", value="True")
 
         if self.stop_callback and stop:
             self.stop_callback()  # Call the stop callback to stop the loop
@@ -459,49 +503,6 @@ class ImageDisplayWindow(tk.Tk):
         self.open_annotation_window_save_Coordinates(index)
         self.grid.reload_grid_and_images()
 
-    def multithread_sam_progressbar(self):
-        popup = tk.Toplevel()
-        popup.title("Processing")
-        duration = len(self.frame_info.get_frame_name_list()) * 0.25  # Total duration estimate
-        label = tk.Label(popup, text="Objects are being tracked...")
-        label.pack(padx=20, pady=10)
-        popup.grab_set()
-
-        # Create a determinate progress bar
-        progress = ttk.Progressbar(popup, orient="horizontal", length=300, mode="determinate", maximum=100)
-        progress.pack(pady=10)
-
-        # Create a separate thread for the long-running task
-        thread = threading.Thread(target=self.track_object)
-        thread.start()
-
-        # Function to update the progress bar based on duration
-        def update_progress():
-            # Update progress based on estimated duration
-            progress['value'] = min(progress['value'] + (100 / (duration * 10)), 100)
-
-            # Continue updating if progress is less than 100%
-            if progress['value'] < 100:
-                popup.after(int(duration * 10), update_progress)
-
-        # Function to check if the thread is done and close the popup
-        def check_thread():
-            if thread.is_alive():
-                popup.after(100, check_thread)
-            else:
-                progress['value'] = 100
-                popup.after(500, popup.destroy)
-
-        # Start updating progress
-        update_progress()
-
-        # Start checking the thread status
-        check_thread()
-
-        # Keep the popup open until it's destroyed
-        self.wait_window(popup)
-
-
     def get_polygon_list(self, img_index):
         json_data = self.json.get_json()
         frame_names = self.frame_info.get_frame_name_list()
@@ -524,11 +525,10 @@ class ImageDisplayWindow(tk.Tk):
         observation_list = self.observations.get_observation_list()
         color_index = observation_list.index(self.radio_var.get())
         polygon_list = self.get_polygon_list(img_index)        
-        window = AnnotationWindow(annotation_window,self. annotation_window_geomertry, shown_frames[img_index], img_index, polygon_list, self.object_class_id, self.sam_model, color_index)
+        window = AnnotationWindow(annotation_window, self.annotation_window_geomertry, shown_frames[img_index], img_index, polygon_list, self.object_class_id, self.sam_model, color_index)
 
         self.wait_window(annotation_window)
         print("Annotation window closed")
-
 
         # Save Coordinates
         points, labels, polygons = window.get_points_and_labels()
@@ -537,7 +537,18 @@ class ImageDisplayWindow(tk.Tk):
 
         if len(points) > 0 and len(points) == len(labels):
             self.add_info_to_json(img_index, polygons, points, labels)
-            self.multithread_sam_progressbar()
+            
+            popup = tk.Toplevel()
+            popup.title("Processing")
+            label = tk.Label(popup, text="Objects are being tracked...")
+            label.pack(padx=20, pady=10)
+            popup.grab_set()  
+            popup.update()
+
+            self.track_object()
+            popup.destroy()
+
+
 
     def add_info_to_json(self, img_index, polygons, points = None, labels = None):
         if img_index == None:
@@ -602,14 +613,32 @@ class ImageDisplayWindow(tk.Tk):
         self.json.save_json_to_file()
 
     def on_key_press(self, event):
-        if event.keysym == "Return":
-            self.read_option_and_clear_entry_field()
-        elif event.keysym == "Right":
+        if event.keysym == "Right":
             self.next_images()
         elif event.keysym == "Left":
             self.prev_images()
     
+    def on_mousewheel_scroll(self, event):
+        amount_of_images = self.frame_info.get_amount_of_frames()
+        if event.state & 0x0004:  # Mousewheel + Ctrl
+            gridsize = int(self.grid.grid_entry.get())
+            if event.delta < 0:
+                gridsize = min(gridsize + 1, int(math.sqrt(amount_of_images)))
+            else:
+                gridsize = max(gridsize - 1, 1)
 
+            self.grid.grid_entry.delete(0, tk.END)
+            self.grid.grid_entry.insert(0, f"{gridsize}")
+
+        else:
+            index = int(self.grid.image_slider.get())
+            if event.delta > 0:
+                index = min(index + 1, amount_of_images)
+            else:
+                index = max(index - 1, 0)
+            self.grid.image_slider.set(index)
+
+        self.grid.reload_grid_and_images()
 
 
     def run(self):
@@ -621,6 +650,8 @@ class ImageDisplayWindow(tk.Tk):
         self.canvas.bind("<Button-3>", self.grid.mark_up_image)  # Bind right click to canvas
         self.canvas.bind("<Button-2>", self.grid.delete_label)  # Bind mousewheel click to canvas
         self.bind('<Key>', self.on_key_press)
+        self.canvas.bind("<MouseWheel>", self.on_mousewheel_scroll)
+
         
 
         self.state("zoomed")    
