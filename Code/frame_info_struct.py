@@ -49,4 +49,6 @@ class FrameInfoStruct:
             if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
                 self.__frame_names.append(file)
                 self.__frame_paths.append(file_path)
-                self.__frames.append(Image.open(file_path))
+                my_img = Image.open(file_path)
+                self.__frames.append(my_img.copy())
+                my_img.close()

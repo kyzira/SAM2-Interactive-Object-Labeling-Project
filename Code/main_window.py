@@ -85,6 +85,13 @@ class ImageDisplayWindow(tk.Tk):
         else:
             self.check_json_for_observations()
 
+        # Define styles for different buttons
+        style = ttk.Style(self)
+        style.configure("Green.TButton", background="green")
+        style.configure("Red.TButton", background="red")
+        style.configure("Blue.TButton", background="blue")
+
+
         # Radiobutton variable to store the selected option
         self.radio_var = tk.StringVar()
 
@@ -103,20 +110,20 @@ class ImageDisplayWindow(tk.Tk):
         self.next_button = ttk.Button(radio_frame, text="Next", command=self.close_window, padding=(10, 10))
         self.next_button.pack(side="right", padx=(5, 5))
 
+        self.skip_button = ttk.Button(radio_frame, text="Skip", command=lambda n=True: self.close_window(skip=n), padding=(10, 10))
+        self.skip_button.pack(side="right", padx=(5, 5))
+
         # Button to stop labeling
         self.finish_button = ttk.Button(radio_frame, text="Finish", command=lambda n=True: self.close_window(stop=n), padding=(10, 10))
         self.finish_button.pack(side="right", padx=(5, 5))
 
-        self.skip_button = ttk.Button(radio_frame, text="Skip", command=lambda n=True: self.close_window(skip=n), padding=(10, 10))
-        self.skip_button.pack(side="right", padx=(5, 5))
+        # Button to start tracking
+        self.tracking_button = ttk.Button(radio_frame, text="Start Tracking", command=self.track_object, style="Green.TButton", padding=(10, 10))
+        self.tracking_button.pack(side="right", padx=(5, 5))
 
         # Separate Frame for the Buttons
         button_frame = tk.Frame(self)
         button_frame.pack(side="top", fill="x", padx=10, pady=5)
-
-        # Create a style for the button with custom font color
-        style = ttk.Style()
-        style.configure("Custom.TButton", background="red")
 
         # Add button
         add_button = ttk.Button(button_frame, text="Add new <Text>", command=self.open_new_obj_window)
@@ -129,7 +136,7 @@ class ImageDisplayWindow(tk.Tk):
                 button.pack(side="left", padx=(5, 0))
 
         # Button to delete labeling
-        self.delete_button = ttk.Button(button_frame, text="Delete unselected label objects", command=self.delete_damage, style="Custom.TButton")
+        self.delete_button = ttk.Button(button_frame, text="Delete unselected label objects", command=self.delete_damage, style="Red.TButton")
         self.delete_button.pack(side="left", padx=(80))
 
         # Initialize canvas
@@ -179,6 +186,7 @@ class ImageDisplayWindow(tk.Tk):
         # Button for updating grid
         self.button = ttk.Button(input_frame, text="Update Grid", command=self.grid.reload_grid_and_images)
         self.button.pack(side="right", padx=(5, 0))
+        
 
         # Entry field for grid size
         self.grid_entry = tk.Entry(input_frame, width=10)
@@ -575,16 +583,7 @@ class ImageDisplayWindow(tk.Tk):
 
         if len(points) > 0 and len(points) == len(labels):
             self.add_info_to_json(img_index, polygons, points, labels)
-            
-            popup = tk.Toplevel()
-            popup.title("Processing")
-            label = tk.Label(popup, text="Objects are being tracked...")
-            label.pack(padx=20, pady=10)
-            popup.grab_set()  
-            popup.update()
 
-            self.track_object()
-            popup.destroy()
 
 
 
@@ -623,6 +622,15 @@ class ImageDisplayWindow(tk.Tk):
         self.json.save_json_to_file()
 
     def track_object(self):
+        popup = tk.Toplevel()
+        popup.title("Processing")
+        label = tk.Label(popup, text="Objects are being tracked...")
+        label.pack(padx=20, pady=10)
+        popup.geometry("400x200")
+        popup.grab_set()  
+        popup.update()
+
+        self.init_sam_with_selected_observation()
         video_segments = self.sam_model.propagate_in_video()
 
         for out_frame_idx, masks in video_segments.items():
@@ -649,12 +657,14 @@ class ImageDisplayWindow(tk.Tk):
             self.add_info_to_json(out_frame_idx, mask_data)
         
         self.json.save_json_to_file()
+        popup.destroy()
+        self.grid.show_selected_images()
 
     def on_key_press(self, event):
         if event.keysym == "Right":
-            self.next_images()
+            self.grid.next_images()
         elif event.keysym == "Left":
-            self.prev_images()
+            self.grid.prev_images()
     
     def on_mousewheel_scroll(self, event):
         amount_of_images = self.frame_info.get_amount_of_frames()
