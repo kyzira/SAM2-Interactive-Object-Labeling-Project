@@ -29,7 +29,7 @@ def check_for_similarity(frame1, frame2, threshold=0.8):
     print(f"SSIM: {similarity_index}")
     return similarity_index > threshold
 
-def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, end_frame=None, frame_rate=1):
+def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, end_frame=None, frame_rate=1, threshold=0.8):
     """
     Extracts frames from a video file.
 
@@ -91,7 +91,7 @@ def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, en
             print(f"Failed to read frame {frame_number}.")
             break
 
-        if last_frame is not None and check_for_similarity(last_frame, frame):
+        if last_frame is not None and check_for_similarity(last_frame, frame, threshold):
             print(f"Frame {frame_number} is similar to the last saved frame. Skipping...")
             continue
 
@@ -106,7 +106,7 @@ def extract_frames_by_frame(input_path: str, output_path: str, start_frame=0, en
     return True
 
 
-def extract_frames_by_damage_time(input_path: str, output_path: str, damage_second=None, rewind_seconds=40, proceed_seconds=10, frame_rate=1):
+def extract_frames_by_damage_time(input_path: str, output_path: str, damage_second=None, rewind_seconds=40, proceed_seconds=10, frame_rate=1, threshold=0.8):
     """
     Extracts frames surrounding a specified timestamp (damage second) in a video.
 
@@ -173,7 +173,7 @@ def extract_frames_by_damage_time(input_path: str, output_path: str, damage_seco
             print(f"Failed to read frame {frame_number}.")
             break
         
-        if last_frame is not None and check_for_similarity(last_frame, frame):
+        if last_frame is not None and check_for_similarity(last_frame, frame, threshold):
             print(f"Frame {frame_number} is similar to the last saved frame. Skipping...")
             continue
 

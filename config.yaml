@@ -3,8 +3,8 @@
 
 # Select the mode, the default mode is list mode. ONLY SET ONE MODE TO TRUE
 mode:
-  list_mode : False   # Follows a Table and opens the next entry in the table, when you close the window
-  test_mode : False # Opens the locally saved test_mode folder as its input
+  list_mode : TRUE   # Follows a Table and opens the next entry in the table, when you close the window
+  test_mode : False  # Opens the locally saved test_mode folder as its input
   folder_mode : False # folder Mode enables a loop, to select a folder with the json and the original frames folder in it, and displays them, with their labeling
   auto_mode : False # Use a pretrained yolo model for labeling. NOT IMPLEMENTED YET!
 
@@ -25,6 +25,12 @@ default_paths:
 settings:
   scroll_speed : 1        # How many images to load when scrolling mousewheel on grid
   default_grid_size : 0   # If set to 0: default to loading maximum, if set to any other number, set grid to that size
+
+  window_maximized : TRUE # If Grid Window shall start maximized, or not
+  window_width : 1200     # only if window_maximized = False
+  window_height : 1000    # only if window_maximized = False
+
+  image_similarity_threshold : 0.8  # Threshold how similar frames can be, when taking them from the video
 
   
 # Put in here the columns, which then can be saved in your result jsons

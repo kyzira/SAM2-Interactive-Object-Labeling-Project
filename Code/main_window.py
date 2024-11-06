@@ -20,9 +20,9 @@ class ImageDisplayWindow(tk.Tk):
         super().__init__()
 
         self.title(window_title)
-        self.geometry("1200x1000")
         self.sam_paths = sam_paths
         self.initialized = False
+        self.splitting_mode = False
         self.video_path = video_path
         checkbox_vars = {}
         self.stop_callback = stop_callback
@@ -31,10 +31,20 @@ class ImageDisplayWindow(tk.Tk):
             "Maximized": None,
             "Geometry": None
         }
+        
+        if settings.get("window_maximized", True) == True:
+            self.state("zoomed")
+        else:
+            width = settings.get("window_width", 1200)
+            height = settings.get("window_height", 1000)
+            self.geometry(f"{width}x{height}")
 
         # Loading Settings
         default_grid_size = settings.get("default_grid_size", 0)
         self.scroll_speed = settings.get("scroll_speed", 1)
+
+        # Similarity Threshold
+        self.similarity_threshold = settings.get("image_similarity_threshold", 0.8)
         
         # Stores the observations
         self.observations = observation_management.RadioButtonManagement()
@@ -129,6 +139,10 @@ class ImageDisplayWindow(tk.Tk):
         add_button = ttk.Button(button_frame, text="Add new <Text>", command=self.open_new_obj_window)
         add_button.pack(side="left", padx=(5, 0))
 
+        # Add button
+        split_button = ttk.Button(button_frame, text="Split current Object", command=self.activate_splitting_mode, style="Blue.TButton")
+        split_button.pack(side="left", padx=(5, 0))
+
         # Add the predefined Buttons
         if len(add_object_buttons) > 0:
             for obj in add_object_buttons:
@@ -208,7 +222,56 @@ class ImageDisplayWindow(tk.Tk):
         self.grid.image_slider = self.image_slider  # Set the slider
         self.grid.grid_entry = self.grid_entry  # Set the grid entry
 
+    def activate_splitting_mode(self):
+        self.splitting_mode = True
+        print("Choose Beginning or End of Selection")
 
+    def split_object(self, clicked_frame_index):
+        # First get first clicked Frame for the selected Object
+        # Then check if there are already other splits between current split and first frame
+        sel_obj = self.radio_var.get()
+        json = self.json.get_json()
+
+        first_frame = None
+        current_frame = None
+
+        # Get First Frame
+        for key, value in json.items():
+            if not value.get("File Name", False):
+                continue
+
+            objects = value.get("Observations")
+            for observations, mask_info in objects.items():
+                if observations != sel_obj:
+                    continue
+                if mask_info.get("Selection Order", None) == 0:
+                    first_frame = int(key)
+
+        # Current Frame
+        current_frame = int(self.frame_info.get_frame_name_list()[clicked_frame_index].split(".")[0])
+        print(f"Clicked Frame: {current_frame}, first Frame: {first_frame}")
+
+        # Check If Split list in Json Info
+        tracking_splits = json["Info"].get("Tracking Splits", dict())
+        if not tracking_splits.get(sel_obj):
+            tracking_splits[sel_obj] = []
+
+        first_shown_frame = int(self.frame_info.get_frame_name_list()[0].split(".")[0])
+        if first_shown_frame not in tracking_splits[sel_obj]:
+            tracking_splits[sel_obj].append(first_shown_frame)
+
+        if current_frame > first_frame:
+            tracking_splits[sel_obj].append(current_frame)
+        else:
+            tracking_splits[sel_obj].append(int(self.frame_info.get_frame_name_list()[clicked_frame_index+1].split(".")[0]))
+
+        tracking_splits[sel_obj].sort()
+        print(f"Splits at: {tracking_splits[sel_obj]}")
+
+        self.json.add_to_info(key="Tracking Splits",
+                              value=tracking_splits)
+        
+        self.grid.show_selected_images()
 
     def reload_model(self):
         # Saves Frame information, like the names, filepaths and so on
@@ -218,7 +281,7 @@ class ImageDisplayWindow(tk.Tk):
         # Loads and interacts with the SAM2 segmentation model
         self.sam_model = Sam(frame_dir, self.sam_paths)
         self.object_class_id = 0
-
+        self.grid.frame_info = self.frame_info
         self.grid.reload_grid_and_images()
 
     def extract_from_video(self):
@@ -243,16 +306,13 @@ class ImageDisplayWindow(tk.Tk):
                 except Exception as e:
                     print(f"Error deleting file {file_path}: {e}")
                     
-            extract_frames_by_frame(self.video_path, self.frame_info.frame_dir, start_frame, end_frame, frame_rate=25)
+            extract_frames_by_frame(self.video_path, self.frame_info.frame_dir, start_frame, end_frame, frame_rate=25, threshold=self.similarity_threshold)
 
             print("Resetting Sam now!")
             self.reload_model()
             self.image_slider.set(0)
 
-            frame_dir = self.frame_info.frame_dir
-            self.frame_info = FrameInfoStruct(frame_dir)
-            self.grid.frame_info = self.frame_info
-            self.grid.reload_grid_and_images()
+            self.reload_model()
 
     
 
@@ -408,7 +468,7 @@ class ImageDisplayWindow(tk.Tk):
                 self.radio_var.set(observation_list[0])
         else:
             self.radio_var.set(observation_list[-1])
-
+            self.radio_button_value_changed()
 
     def delete_damage(self):
         to_delete_list = []
@@ -546,7 +606,12 @@ class ImageDisplayWindow(tk.Tk):
             print("No value selected or observation list empty!")
             return
         
-        self.open_annotation_window_save_Coordinates(index)
+        if self.splitting_mode == True:
+            self.splitting_mode = False
+            self.split_object(index)
+        else:
+            self.open_annotation_window_save_Coordinates(index)
+
         self.grid.reload_grid_and_images()
 
     def get_polygon_list(self, img_index):
@@ -626,7 +691,7 @@ class ImageDisplayWindow(tk.Tk):
         popup.title("Processing")
         label = tk.Label(popup, text="Objects are being tracked...")
         label.pack(padx=20, pady=10)
-        popup.geometry("400x200")
+        popup.geometry("400x100")
         popup.grab_set()  
         popup.update()
 
@@ -671,7 +736,7 @@ class ImageDisplayWindow(tk.Tk):
         if event.state & 0x0004:  # Mousewheel + Ctrl
             gridsize = int(self.grid.grid_entry.get())
             if event.delta < 0:
-                gridsize = min(gridsize + 1, int(math.sqrt(amount_of_images)))
+                gridsize = min(gridsize + 1, int(math.sqrt(amount_of_images)) + 1)
             else:
                 gridsize = max(gridsize - 1, 1)
 
@@ -702,7 +767,7 @@ class ImageDisplayWindow(tk.Tk):
 
         
 
-        self.state("zoomed")    
+
         self.update_idletasks()
         self.update()
         self.grid.reload_grid_and_images()

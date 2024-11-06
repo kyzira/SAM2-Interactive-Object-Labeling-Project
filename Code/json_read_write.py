@@ -173,7 +173,7 @@ class JsonReadWrite:
                 frame = self.__json_data[str(frame_key)]
                 if damage in frame["Observations"].keys():
                     del frame["Observations"][damage]
-            else:
+            elif frame_key == None:
                 for frame in self.__json_data.values():
                     if "Observations" not in frame:
                         continue

@@ -85,10 +85,15 @@ class ImageGridManager:
                         continue
                     if img_name in frame["File Name"]:
                         masked_img = self.draw_mask_on_image(img, frame)
+                        masked_img = self.draw_tracking_splits(tracking_splits=json_data["Info"].get("Tracking Splits", {}), img=masked_img, frame=frame)
                         img = masked_img
 
             # Resize the image
-            img = img.resize((int(cell_width), int(cell_height)), Image.Resampling.LANCZOS)
+            if cell_width > 0 and cell_height > 0:
+                img = img.resize((int(cell_width), int(cell_height)), Image.Resampling.LANCZOS)
+            else:
+                print("Error: Canvas dimensions or grid size are invalid.")
+                return
             tk_img = ImageTk.PhotoImage(img)
 
             self.image_refs.append(tk_img)
@@ -151,10 +156,7 @@ class ImageGridManager:
                     continue
 
                 # Check if "Mask Polygon" exists
-                if "Mask Polygon" in schaden_data:
-                    polygons = schaden_data["Mask Polygon"]
-                else:
-                    polygons = None
+                polygons = schaden_data.get("Mask Polygon")
 
                 observation_index = observation_list.index(kuerzel)
                 color = colors[observation_index % len(colors)]
@@ -180,6 +182,34 @@ class ImageGridManager:
             img = img.convert("RGB")
 
         return img
+
+    def draw_tracking_splits(self, tracking_splits, img, frame):
+        # Check Tracking Splits in json["Info"]
+        kuerzel = self.radio_var.get()
+        if tracking_splits == {}:
+            return img
+        
+        for observation_key, associated_keys in tracking_splits.items():
+            if kuerzel != observation_key:
+                continue
+
+            for frame_num in associated_keys:
+                if int(frame["File Name"].split(".")[0]) != frame_num:
+                    continue
+
+                border_thickness = 3
+                _, img_height = img.size
+                overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+                overlay_draw = ImageDraw.Draw(overlay)
+                overlay_draw.rectangle(
+                    [(0, 0), (border_thickness, img_height)],
+                    fill=(0, 0, 255, 255)  
+                )
+                img = Image.alpha_composite(img.convert("RGBA"), overlay)
+
+        return img
+            
+            
 
 
     def draw_points_on_image(self, overlay_draw, schaden_data, img):
@@ -207,7 +237,7 @@ class ImageGridManager:
                 overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=(255, 0, 0, 255))
 
         # Draw yellow border if this is the first labeled image (selection order 0)
-        if "Selection Order" in schaden_data and schaden_data["Selection Order"] == 0:
+        if schaden_data.get("Selection Order") == 0:
             border_thickness = 3
             img_width, img_height = img.size
             overlay_draw.rectangle(
