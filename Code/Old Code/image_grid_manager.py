@@ -13,20 +13,112 @@ class ImageGridManager:
         self.image_refs = []
         self.marked_frames = []
         self.initialized = True  # Assuming the manager is initialized for demonstration
+        self.image_layers = {}
+        self.overlay_library = {}
 
-    def reload_grid_and_images(self):
-        grid_size = int(self.grid_entry.get())
 
-        if grid_size < 1:
-            print(f"Error: Gridsize invalid: {grid_size}")
+    def create_base_layer(self):
+        frames = self.frame_info.get_frames()
+        frame_names = self.frame_info.get_frame_name_list()
+
+        for frame, frame_name in zip(frames, frame_names):
+            self.image_layers[frame_name] = {"Base" : frame,
+                                             "Mask" : {},
+                                             "Overlay": {},
+                                             "Combined" : frame}
+
+
+    def add_mask_layers(self, frame_name, observation, mask):
+        self.image_layers[frame_name]["Mask"][observation] = mask
+
+    def add_overlay_layers(self, frame_name, overlay_type, overlay):
+        self.image_layers[frame_name]["Overlay"][overlay_type] = overlay   
+
+    def delete_mask_layer(self, frame_name = None, observation = None):
+        del self.image_layers[frame_name]["Overlay"][observation]
+
+    def delete_overlay_layer(self, frame_name = None, overlay_type = None):
+        del self.image_layers[frame_name]["Overlay"][overlay_type]
+
+    def combine_layers(self):
+        for frame_name in self.image_layers.keys():
+            base_img = self.image_layers[frame_name]["Base"].copy()
+
+            for mask in self.image_layers[frame_name]['Mask'].values():
+                base_img = Image.alpha_composite(base_img.convert("RGBA"), mask)
+
+            for overlay in self.image_layers[frame_name]['Overlay'].values():
+                base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
+
+            self.image_layers[frame_name]["Combined"] = base_img
+
+    def create_overlay_library(self):
+        # Draw Red border around image
+        border_thickness = 5
+        img_width, img_height = img.size
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rectangle(
+            [(0, 0), (img_width, border_thickness)],
+            fill=(255, 0, 0, 255)  # Red color
+        )
+        overlay_draw.rectangle(
+            [(0, 0), (border_thickness, img_height)],
+            fill=(255, 0, 0, 255)  # Red color
+        )
+        overlay_draw.rectangle(
+            [(img_width - border_thickness, 0), (img_width, img_height)],
+            fill=(255, 0, 0, 255)  # Red color
+        )
+        overlay_draw.rectangle(
+            [(0, img_height - border_thickness), (img_width, img_height)],
+            fill=(255, 0, 0, 255)  # Red color
+        )
+        img = Image.alpha_composite(img.convert("RGBA"), overlay)
+
+
+  
+
+    def show_selected_images(self, start_index=None):
+        """Displays images in a grid format on the canvas."""
+        if not self.initialized:
             return
 
-        images_per_grid = grid_size * grid_size
-        slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
-        self.image_slider.config(from_=0, to=slider_max)
+        if start_index is None:
+            start_index = self.image_slider.get()
 
-        self.show_selected_images()
+        image_list = self.frame_info.get_frames()
+        image_names = self.frame_info.get_frame_name_list()
 
+        self.canvas.delete("all")
+        cell_width, cell_height, grid_size = self.get_canvas_info()
+
+        for i in range(grid_size * grid_size):
+            index = int(start_index + i)
+
+            if index >= len(image_list):
+                break
+
+            # Get Image
+            img_name = image_names[index]
+            img = self.image_layers[img_name]["Combined"]
+
+            # Resize the image
+            if cell_width > 0 and cell_height > 0:
+                img = img.resize((int(cell_width), int(cell_height)), Image.Resampling.LANCZOS)
+            else:
+                print("Error: Canvas dimensions or grid size are invalid.")
+                return
+            tk_img = ImageTk.PhotoImage(img)
+
+            self.image_refs.append(tk_img)
+
+            # Place the image on the canvas
+            row = i // grid_size
+            col = i % grid_size
+            x_position = col * cell_width
+            y_position = row * cell_height
+            self.canvas.create_image(x_position + cell_width // 2, y_position + cell_height // 2, image=tk_img)
 
 
     def get_canvas_info(self):
@@ -50,6 +142,32 @@ class ImageGridManager:
         cell_height = canvas_height / grid_size
 
         return cell_width, cell_height, grid_size
+
+
+    def reload_grid_and_images(self):
+        grid_size = int(self.grid_entry.get())
+
+        if grid_size < 1:
+            print(f"Error: Gridsize invalid: {grid_size}")
+            return
+
+        images_per_grid = grid_size * grid_size
+        slider_max = max(0, len(self.frame_info.get_frame_name_list()) - images_per_grid)
+        self.image_slider.config(from_=0, to=slider_max)
+
+        self.show_selected_images()
+
+
+
+
+
+
+
+
+
+
+
+ 
 
     def show_selected_images(self, start_index=None):
         """Displays images in a grid format on the canvas."""
@@ -209,7 +327,6 @@ class ImageGridManager:
 
         return img
             
-            
 
 
     def draw_points_on_image(self, overlay_draw, schaden_data, img):
@@ -269,15 +386,17 @@ class ImageGridManager:
         self.show_selected_images(new_index)
         self.image_slider.set(new_index)  # Update slider
 
-    def mark_up_image(self, event):
-        """Handle right click events on the canvas."""
-        x, y = event.x, event.y
+    def get_clicked_image_index(self, x, y):
         cell_width, cell_height, grid_size = self.get_canvas_info()
         row = int(y // cell_height)
         col = int(x // cell_width)
         start_index = int(self.image_slider.get())
         # Calculate the index of the clicked image
-        img_index = row * grid_size + col + start_index
+        return row * grid_size + col + start_index
+
+    def mark_up_image(self, event):
+        """Handle right click events on the canvas."""
+        img_index = self.get_clicked_image_index(event.x, event.y)
         print(f"Marked Image index: {img_index}")
 
         shown_frame_names = self.frame_info.get_frame_name_list()
@@ -295,13 +414,7 @@ class ImageGridManager:
 
     def delete_label(self, event):
         """Handle right click events on the canvas."""
-        x, y = event.x, event.y
-        cell_width, cell_height, grid_size = self.get_canvas_info()
-        row = int(y // cell_height)
-        col = int(x // cell_width)
-        start_index = int(self.image_slider.get())
-        # Calculate the index of the clicked image
-        img_index = row * grid_size + col + start_index
+        img_index = self.get_clicked_image_index(event.x, event.y)
 
         image_names = self.frame_info.get_frame_name_list()
         img_num = int(image_names[img_index].split(".")[0])   

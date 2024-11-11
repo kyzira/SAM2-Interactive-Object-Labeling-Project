@@ -33,6 +33,7 @@ settings:
   
 # Put in here the columns, which then can be saved in your result jsons
 default_table_columns:
+  - Videopfad
   - Inspektions-ID
   - Videoname
   - Rohrmaterial

@@ -1,8 +1,6 @@
-import numpy as np
-import matplotlib.pyplot as plt
 import tkinter as tk
-from PIL import Image, ImageTk, ImageDraw
-import cv2
+from PIL import Image, ImageTk
+from image_view import ImageView
 
 class AnnotationWindow:
     """
@@ -24,148 +22,99 @@ class AnnotationWindow:
                 These lists can then be used to track the object throughout the whole video.
     """
 
-    def __init__(self, annotation_window: tk.Toplevel, annotation_window_geomertry, img: Image, img_index: int, polygon_list, object_class_id: int, sam2, color_index: int):
-        """
-            annotation_window:
-                This is a tkinter window class. it is used to add a canvas to it and display the image and register where on it it was clicked.
-            img:
-                This is the image to be displayed, opened as a PIL.Image
-            img_index:
-                This is the Index of the Image in relation to SAMs Images. For example, if this is the 2. Image which is displayed in sam, then the Index will be 2
-            Object_class_id:
-                This is the ID belonging to the to be tracked object
-        """
-        if not annotation_window:
-            print("Error: annotation window is not set")
-            return
-        if not img:
-            print("Error: Image not set")
-            return
-        if img_index == None:
-            print("Error: Image Index not set")
-            return
-        if object_class_id == None:
-            print("Error: Object Class ID not set")
-            return    
-        if not sam2:
-            print("Error: SAM not set")   
-        
-        self.annotation_window = annotation_window
+    def __init__(self, frame_data:dict):
+        self.annotation_window = None
+        self.canvas = None
 
-        self.points = []
-        self.labels = []
+        self.points = {
+            "1" : [],
+            "0" : []
+        }
+        self.polygons = []
+        self.order_of_addition = []
 
-        self.color_index = color_index
-
-        if len(polygon_list)>0:
-            print("Existing Polygons found!")
-            self.polygons = polygon_list
-        else:
-            self.polygons = []
+        self.frame_data = frame_data
 
         self.geometry_data = None
         self.window_maximized = False
 
-        self.sam2 = sam2
-        self.object_class_id = object_class_id
-        self.img_index = img_index
-        self.original_image = img  # Store the original image
-        
-        # Store the shown image
-        self.image = img.copy()
+        self.sam_model = None
+        self.object_class_id = None
+        self.frame_index = None
+
+        self.img_view = None        # Store the image_view class
+        self.color = None           # Polygon Color
+
+        self.image_id = None        # To Store the image for it not to be garbage collected
+        self.tk_image = None        # To Store the image for it not to be garbage collected
         
         self.resized_width = None
         self.resized_height = None
 
+    def init_image(self, img_view:ImageView, color:str):
+        self.img_view = img_view
+        self.color = color
+
+        polygons = self.frame_data.get("Polygons")
+        points = self.frame_data.get("Points")
+        if polygons:
+            self.img_view.draw_poylgon(polygons, color=color)
+        if points:
+            if len(points["1"]) > 0 or len(points["0"]) > 0:
+                self.img_view.draw_points(points)
+
+    def init_window(self, window_geometry:dict):
+        annotation_window = tk.Toplevel()
+        annotation_window.title(f"Punkte hinzufügen")
+        annotation_window.grab_set()
+
+        if window_geometry.get("Maximized", False) == True:
+            annotation_window.state("zoomed")
+        elif window_geometry.get("Geometry"):
+            annotation_window.geometry(window_geometry["Geometry"])
+        else:
+            annotation_window.geometry(f"{self.img_view.get_image().width}x{self.img_view.get_image().height}")  # Set initial window size to image size
+
         # Create a canvas
-        self.canvas = tk.Canvas(self.annotation_window)
-        if annotation_window_geomertry["Maximized"] == True:
-            self.annotation_window.state("zoomed")
-        elif annotation_window_geomertry["Geometry"]:
-            annotation_window.geometry(annotation_window_geomertry["Geometry"])
-        else:
-            annotation_window.geometry(f"{img.width}x{img.height}")  # Set initial window size to image size
-
+        self.canvas = tk.Canvas(annotation_window)
         self.canvas.pack()
-        # Display the image on the canvas
-        self.image_id = None # ToDo: change to image_exists = False
-
-        if len(self.polygons)>0:
-            self.__draw_initial_polygons()
-        else:
-            self.__display_image(self.image)
 
         # Change image width when resizing
-        self.annotation_window.bind('<Configure>', self.__on_resize)
+        annotation_window.bind('<Configure>', self.__on_resize)
         # Bind mouse click and key press events 
         self.canvas.bind('<Button-1>', self.__on_click)  
         self.canvas.bind('<Button-3>', self.__on_click)
         self.canvas.bind('<Key>', self.__on_key_press)
         self.canvas.focus_set()
         # Add a protocol to handle window close
-        self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
+        annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
+
+        self.annotation_window = annotation_window
+        self.__draw_image_on_canvas()
+
+    def init_sam(self, frame_index, object_class_id, sam_model):
+        self.frame_index = frame_index
+        self.object_class_id = object_class_id
+        self.sam_model = sam_model
+
+
 
     def get_points_and_labels(self):
-        return self.points, self.labels, self.polygons
+        return self.points, self.polygons
     
     def get_geometry(self):
         # This returns the size and position of the annotation window
         return self.window_maximized, self.geometry_data
 
 
+
     def __on_resize(self, event):
         # Update canvas size to match window size
-        new_width = event.width
-        new_height = event.height
-        
-        self.canvas.config(width=new_width, height=new_height)
-
-        resized_image = self.original_image.resize((new_width, new_height), Image.LANCZOS)
-        self.tk_image = ImageTk.PhotoImage(resized_image)
-
-        # Update the image on the canvas
-        if self.image_id is not None:
-            self.canvas.delete(self.image_id)
-        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
-
-        self.resized_width = new_width
-        self.resized_height = new_height
-        # Redraw points on the resized image
-        self.__display_image(self.image)
-
-
-    def __display_image(self, image):
-        # Create a new image to draw points on
-        if self.resized_width and self.resized_height:
-            img_with_points = image.resize((self.resized_width, self.resized_height), Image.LANCZOS)
-        else:
-            img_with_points = image.copy()
-
-        draw = ImageDraw.Draw(img_with_points)
-
-        # Loop through points and draw them based on the new size
-        original_width, original_height = self.original_image.size
-        for point, label in zip(self.points, self.labels):
-            color = (0, 255, 0) if label == 1 else (255, 0, 0)  # Green for 1, Red for 0
-            x, y = point
-            
-            # Scale points to the resized image dimensions
-            scaled_x = int(self.resized_width * (x / original_width))
-            scaled_y = int(self.resized_height * (y / original_height))
-            
-            # Draw a circle at the scaled point
-            radius = 5  # Size of the circle
-            draw.ellipse([(scaled_x - radius, scaled_y - radius), (scaled_x + radius, scaled_y + radius)], fill=color)
-
-        # Create a new PhotoImage to display
-        self.tk_image = ImageTk.PhotoImage(img_with_points)
-        
-        # If there's an existing image, delete it before displaying the new one
-        if self.image_id is not None:
-            self.canvas.delete(self.image_id)
-
-        # Create a new image on the canvas
-        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
+        self.resized_width = event.width
+        self.resized_height = event.height
+        self.canvas.config(width=self.resized_width, height=self.resized_height)
+   
+        self.__draw_image_on_canvas()
 
     def __on_close(self):
         # This function is called when the annotation window is closed
@@ -175,121 +124,96 @@ class AnnotationWindow:
         self.annotation_window.destroy()
 
     def __on_click(self, event):
-        if event.num == 1: # left click
-            self.labels.append(1)
-        elif event.num == 3: # right click
-            self.labels.append(0)
-        
         # Get the coordinates of the click
         x, y = event.x, event.y
         # Canvas size
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         # actual image size
-        image_width, image_height = self.original_image.size
+        image_width, image_height = self.img_view.get_drawn_image().size
 
         # Clicked Coordinates in relation to actual image pixels
         image_x = int(image_width * (x / canvas_width))
         image_y = int(image_height * (y / canvas_height))
 
-        self.points.append([image_x, image_y])
+        if event.num == 1: # left click
+            self.points["1"].append([image_x, image_y])
+            self.order_of_addition.append(1)
+        elif event.num == 3: # right click
+            self.points["0"].append([image_x, image_y])
+            self.order_of_addition.append(0)
 
-        self.image = self.__create_propagated_image()
-        self.__display_image(self.image)
+        self.__create_propagated_image()
 
     def __on_key_press(self, event):
         # Remove last added Point
         if event.keysym == "BackSpace":
-            if self.points:
-                print(f"Removed last point: {self.points[-1]} with label {self.labels[-1]}")
-                self.points.pop()
-                self.labels.pop()
-
-                self.image = self.__create_propagated_image()
-                self.__display_image(self.image)
-
+            if len(self.order_of_addition) == 0:
+                return
+            
+            label = self.order_of_addition.pop()
+            self.points[str(label)].pop()
+            if len(self.order_of_addition) == 0:
+                self.img_view.reset_drawn_image()
             else:
-                # Clear the mask and show the original image if no points are left
-                self.__display_image(self.original_image)
+                self.__create_propagated_image()
+            
+            self.__draw_image_on_canvas()
+
+
+    def __draw_image_on_canvas(self):
+        image_to_display = self.img_view.get_drawn_image()
+
+        if self.resized_width and self.resized_height:
+            image_to_display = image_to_display.resize((self.resized_width, self.resized_height), Image.Resampling.LANCZOS)
+
+        # Create a new PhotoImage to display
+        self.tk_image = ImageTk.PhotoImage(image_to_display)
+        
+        # If there's an existing image, delete it before displaying the new one
+        if self.image_id is not None:
+            self.canvas.delete(self.image_id)
+
+        # Create a new image on the canvas
+        self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
 
     def __create_propagated_image(self):
         # Give the list of clicked points to Sam, get a mask back, convert the mask into polygons and then draw them
-        if not self.points or not len(self.points):
-            return self.original_image
+        if not self.points:
+            return
+        if not len(self.points["1"]) and not len(self.points["0"]):
+            return
         
-        mask = self.__propagate_image()  # Get the mask from your existing propagate method
-        self.polygons = self.__convert_mask_to_polygons(mask)  # Convert the mask to polygons
-        propagated_image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)  # Draw the polygons on the original image
-        return propagated_image
+        
+        self.img_view.reset_drawn_image()
+
+        masks = self.__propagate_image()  # Get the mask from your existing propagate method
+        self.polygons = self.img_view.draw_and_convert_masks(masks, self.color)
+        self.img_view.draw_points(self.points)
+        
+        self.__draw_image_on_canvas()
 
     def __propagate_image(self):
         # Prepare the structure and then send to sam
+
+        points = []
+        labels = []
+
+        for key, value in self.points.items():
+            for point in value:
+                points.append(point)
+                labels.append(key)
+
+
         points_labels_and_frame_index = {
-            "Points" : self.points,
-            "Labels" : self.labels,
-            "Image Index" : self.img_index
+            "Points" : points,
+            "Labels" : labels,
+            "Image Index" : self.frame_index
         }
 
-        mask = self.sam2.add_point(points_labels_and_frame_index, self.object_class_id)
+        mask = self.sam_model.add_point(points_labels_and_frame_index, self.object_class_id)
 
         if len(mask) == 0:
             print("Error: Mask length == 0")
 
         return mask
-
-
-    def __convert_mask_to_polygons(self, mask):
-        # Initialize a list to hold all mask data
-        polygons = []
-
-        # Remove singleton dimensions
-        mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1
-
-        # Extract contours using OpenCV
-        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-        for contour in contours:
-            # Simplify the contour using approxPolyDP
-            epsilon = 0.0001 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
-            simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
-
-            # Convert contour points to a list of tuples
-            simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
-            if len(simplified_contour) > 2:
-                polygons.append(simplified_contour)
-
-        return polygons
-
-    def __draw_initial_polygons(self):
-
-        self.image = self.__draw_polygons_on_image(self.original_image.copy(), self.polygons)
-        self.__display_image(self.image)
-
-    def __draw_polygons_on_image(self, image, polygons):  # Default color is semi-transparent red
-        colors = [
-            (255, 0, 0, 100),   # Red with transparency
-            (0, 0, 255, 100),   # Blue with transparency
-            (0, 255, 0, 100),   # Green with transparency
-            (255, 255, 0, 100), # Yellow with transparency
-            (255, 0, 255, 100)  # Magenta with transparency
-        ]
-        color = colors[self.color_index % len(colors)]
-
-        overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))  # Create an empty overlay
-        overlay_draw = ImageDraw.Draw(overlay)
-
-        for polygon in polygons:
-            polygon_tuples = [tuple(point) for point in polygon]
-
-            if len(polygon_tuples) > 3:  # Ensure there are enough points to form a polygon
-                if polygon_tuples[0] != polygon_tuples[-1]:
-                    polygon_tuples.append(polygon_tuples[0])
-                
-                overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
-
-
-        # Composite the overlay with the original image
-        if image.mode != 'RGBA':
-            image = image.convert('RGBA')
-        image = Image.alpha_composite(image, overlay)
-        return image.convert("RGB")  # Return a standard RGB image

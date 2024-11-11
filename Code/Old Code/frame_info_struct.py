@@ -32,6 +32,8 @@ class FrameInfoStruct:
         self.__extract_info()
         self.masks = dict()
 
+    def get_frame_dir(self):
+        return self.frame_dir
 
     def get_frame_name_list(self):
         return self.__frame_names
