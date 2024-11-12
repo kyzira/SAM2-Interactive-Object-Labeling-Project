@@ -7,10 +7,18 @@ class ImageView:
     def __init__(self, image_path : str) -> None:
         self.__image_path = image_path
         temp_image = Image.open(self.__image_path)
+
         self.__image = temp_image.copy()
         temp_image.close()
+
         self.__drawn_image = self.__image.copy()
         self.img_size = self.__image.size
+
+        self.__borders = {
+            "Marked": False
+        }
+
+        self.__data = {}
 
     def get_image(self):
         return self.__image.copy()
@@ -25,10 +33,76 @@ class ImageView:
         return os.path.basename(self.__image_path)
     
     def get_frame_num(self):
-        return os.path.basename(self.__image_path).split(".")[0]
+        return int(os.path.basename(self.__image_path).split(".")[0])
+    
+    def get_data(self):
+        return self.__data.copy()
 
-    def reset_drawn_image(self):
-        self.__drawn_image = self.__image.copy()
+    def get_border_value(self, observation: str, border = None):
+        if border:
+            return self.__borders[observation].get(border)
+        else:
+            return self.__borders.get(observation)
+
+    def set_border(self, observation: str, border: str, value: bool):
+        if border == "Marked":
+            self.__borders[border] = value
+
+        if observation not in self.__borders.keys():
+            self.__borders[observation] = {
+                "Border Left": False,
+                "Border Right": False,
+                "First Frame": False
+            }
+
+        if observation not in self.__data.keys():
+            self.__data[observation] = {}
+
+        self.__borders[observation][border] = value
+
+    def set_data(self, data):
+        self.__data = data
+
+    def add_to_data(self, observation, observation_data):
+        self.__data[observation] = observation_data
+
+    def draw(self, button_states: dict):
+        self.reset_drawn_image()
+
+        shown_observation = []
+        selected_observation = None
+
+        for observation, values in button_states.items():
+            if values.get("Visible"):
+                shown_observation.append(observation)
+            if values.get("Selected"):
+                selected_observation = observation
+
+        for observation, observation_data in self.__data.items():
+            if observation not in shown_observation:
+                continue
+
+            if observation_data.get("Mask Polygon"):
+                self.draw_polygon(polygons=observation_data["Mask Polygon"], color=button_states[observation].get("Color"))
+            
+            if self.__borders.get("Marked"):
+                self.draw_border(side="top", color="red_full")
+            
+            if observation != selected_observation:
+                continue 
+
+            if observation_data.get("Points"):
+                self.draw_points(points_dict=observation_data["Points"])
+
+            if observation not in self.__borders.keys():
+                continue
+
+            if self.__borders[observation].get("Border Left"):
+                self.draw_border(side="left", color="blue_full")
+            if self.__borders[observation].get("Border Right"):
+                self.draw_border(side="right", color="blue_full")
+            if self.__borders[observation].get("First Frame"):
+                self.draw_border(side="all", color="yellow_full", thickness=15)
 
     def draw_points(self, points_dict:dict, radius=5):
         base_img = self.__drawn_image
@@ -49,7 +123,7 @@ class ImageView:
         base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
         self.__drawn_image = base_img
 
-    def draw_border(self, side="all", color="red", thickness=5):
+    def draw_border(self, side="all", color="red", thickness=20):
         base_img = self.__drawn_image
         color = self.__get_color(color)
         img_width, img_height = self.img_size
@@ -98,14 +172,24 @@ class ImageView:
 
         overlay = Image.new("RGBA", self.img_size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay, "RGBA")
+        
+        # Ensure polygons is a list of lists of tuples
         if polygons:
             for polygon in polygons:
-                polygon_tuples = [tuple(point) for point in polygon]
-                if len(polygon_tuples) > 3:
+                # Here, we check if the polygon is already in tuple format
+                if isinstance(polygon[0], tuple):
+                    polygon_tuples = polygon
+                else:
+                    # Convert the polygon points into tuples if they are not already
+                    polygon_tuples = [tuple(point) for point in polygon]
+
+                if len(polygon_tuples) > 3:  # Draw the polygon only if it has more than 3 points
                     overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
+        # Composite the overlay onto the base image
         base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
         self.__drawn_image = base_img
+
 
     def draw_and_convert_masks(self, mask, color="red") -> list:
         polygons = []
@@ -125,10 +209,12 @@ class ImageView:
             
             polygons.append(simplified_contour)
 
-        self.draw_poylgon(polygons, color)
+        self.draw_polygon(polygons, color)
 
         return polygons
 
+    def reset_drawn_image(self):
+        self.__drawn_image = self.__image.copy()
 
 
     def __get_color(self, color="red"):

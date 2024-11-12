@@ -30,20 +30,6 @@ settings:
 
   image_similarity_threshold : 0.8  # Threshold how similar frames can be, when taking them from the video
 
-  
-# Put in here the columns, which then can be saved in your result jsons
-default_table_columns:
-  - Inspektions-ID
-  - Videoname
-  - Rohrmaterial
-  - Inspekteur-Name
-  - Extracted Frame Rate
-  - Rohrprofil
-  - Rohrhoehe (mm)
-  - Rohrbreite (mm)
-  - Videohash
-  - Label
-  - Videozeitpunkt (h:min:sec)
 
 
 # Every element of this list will become a seperate Button for quickly adding new classes

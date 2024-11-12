@@ -22,7 +22,7 @@ class AnnotationWindow:
                 These lists can then be used to track the object throughout the whole video.
     """
 
-    def __init__(self, frame_data:dict):
+    def __init__(self, img_view:ImageView, color:str):
         self.annotation_window = None
         self.canvas = None
 
@@ -30,10 +30,12 @@ class AnnotationWindow:
             "1" : [],
             "0" : []
         }
+
         self.polygons = []
         self.order_of_addition = []
 
-        self.frame_data = frame_data
+        self.img_view = img_view
+        self.color = color
 
         self.geometry_data = None
         self.window_maximized = False
@@ -42,26 +44,12 @@ class AnnotationWindow:
         self.object_class_id = None
         self.frame_index = None
 
-        self.img_view = None        # Store the image_view class
-        self.color = None           # Polygon Color
-
         self.image_id = None        # To Store the image for it not to be garbage collected
         self.tk_image = None        # To Store the image for it not to be garbage collected
         
         self.resized_width = None
         self.resized_height = None
 
-    def init_image(self, img_view:ImageView, color:str):
-        self.img_view = img_view
-        self.color = color
-
-        polygons = self.frame_data.get("Polygons")
-        points = self.frame_data.get("Points")
-        if polygons:
-            self.img_view.draw_poylgon(polygons, color=color)
-        if points:
-            if len(points["1"]) > 0 or len(points["0"]) > 0:
-                self.img_view.draw_points(points)
 
     def init_window(self, window_geometry:dict):
         annotation_window = tk.Toplevel()
@@ -105,6 +93,9 @@ class AnnotationWindow:
     def get_geometry(self):
         # This returns the size and position of the annotation window
         return self.window_maximized, self.geometry_data
+    
+    def get_index(self):
+        return self.frame_index
 
 
 
@@ -121,7 +112,7 @@ class AnnotationWindow:
         if self.annotation_window.state() == "zoomed":
             self.window_maximized = True
         self.geometry_data = self.annotation_window.geometry()
-        self.annotation_window.destroy()
+
 
     def __on_click(self, event):
         # Get the coordinates of the click

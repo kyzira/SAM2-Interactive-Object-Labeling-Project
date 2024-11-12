@@ -4,15 +4,17 @@ from datetime import datetime
 
 
 class JsonReadWrite:
-    def __init__(self, json_path, default_table_columns=[], table_row={}):
+    def __init__(self, json_path, table_row={}):
         self.__json_data = dict()
         self.json_path = json_path
-        self.default_table_columns = default_table_columns
         self.table_row = table_row
         self.load_json_from_file()
 
     def get_json(self):
-        return self.__json_data
+        return self.__json_data.copy()
+    
+    def reset_json(self):
+        self.__json_data = dict()
          
     def load_json_from_file(self):
         if os.path.exists(self.json_path):
@@ -31,8 +33,11 @@ class JsonReadWrite:
         self.save_json_to_file()
         if self.table_row != {}:
             self.__create_info()
-
         return
+    
+    def set_json(self, json):
+        self.__json_data = json
+        self.save_json_to_file()
     
     def save_json_to_file(self):
         try:
@@ -42,22 +47,31 @@ class JsonReadWrite:
             print(f"File could not be saved! Error: {e}")
 
     def add_to_info(self, key, value):
-        if "Info" in self.__json_data:
-            self.__json_data["Info"][key] = value
-            self.save_json_to_file()
+        if "Info" not in self.__json_data:
+            self.__json_data["Info"] = {}
 
-    def add_marked_frames_to_info(self, frames_list: list[str]):
-        self.__json_data["Info"]["Marked Frames"] = frames_list
+        self.__json_data["Info"][key] = value
         self.save_json_to_file()
 
+
     def get_marked_frames_from_info(self):
-        if "Marked Frames" in self.__json_data["Info"]:
-            return self.__json_data["Info"]["Marked Frames"]
-        else:
-            return []
+        return self.__json_data["Info"].get("Marked Frames", [])
 
         
-    def add_to_frame(self, frame_name: str, observation: str, polygons = None, pos_points = None, neg_points = None):
+    def add_intervalls_to_info(self, observation: str, intervall_list: list[(int,int)]):
+        intervalls = self.__json_data["Info"].get("Intervalls", {})
+        intervalls[observation] = intervall_list
+        self.__json_data["Info"]["Intervalls"] = intervalls
+        self.save_json_to_file()
+
+    def get_intervalls_from_info(self, observation=None):
+        if observation == None:
+            return self.__json_data["Info"].get("Intervalls")
+        else:
+            return self.__json_data["Info"]["Intervalls"].get(observation)
+
+        
+    def add_to_frame(self, frame_name: str, observation: str, observation_data: dict):
         """
             This function adds an element to the dictionairy which will be saved as a json.
             Depending on which parameters are given the json structure will be created.
@@ -79,10 +93,15 @@ class JsonReadWrite:
 
         coordinates_dict = self.__json_data[frame_num]["Observations"][observation]
 
+        polygons = observation_data.get("Mask Polygon")
+        points = observation_data.get("Points")
+        pos_points = points.get("1")
+        neg_points = points.get("0")
+
         if polygons:
             coordinates_dict["Mask Polygon"] = polygons
 
-        if pos_points or neg_points:
+        if points:
             coordinates_dict["Points"] = dict()
             selection_order = self.__check_for_selection_order(observation)
             coordinates_dict["Selection Order"] = selection_order
@@ -133,7 +152,7 @@ class JsonReadWrite:
 
     def __create_info(self):
         damage_table = self.table_row
-        keys_to_include = self.default_table_columns
+
 
         observation_name_and_time = f"{damage_table['Label']}, at {damage_table['Videozeitpunkt (h:min:sec)']}"
         # Create a list of relevant keys from config.yaml
@@ -149,9 +168,8 @@ class JsonReadWrite:
             # Initialize the "Info" dictionary
             self.__json_data["Info"] = {}
     
-            for key in keys_to_include:
-                if key in damage_table:
-                    self.__json_data["Info"][key] = damage_table[key]
+            for key in damage_table.keys():
+                self.__json_data["Info"][key] = damage_table[key]
             self.__json_data["Info"]["Documented Observations"] = [observation_name_and_time]
         self.save_json_to_file()
         
