@@ -95,8 +95,7 @@ class JsonReadWrite:
 
         polygons = observation_data.get("Mask Polygon")
         points = observation_data.get("Points")
-        pos_points = points.get("1")
-        neg_points = points.get("0")
+        
 
         if polygons:
             coordinates_dict["Mask Polygon"] = polygons
@@ -105,10 +104,13 @@ class JsonReadWrite:
             coordinates_dict["Points"] = dict()
             selection_order = self.__check_for_selection_order(observation)
             coordinates_dict["Selection Order"] = selection_order
-        if pos_points:
-            coordinates_dict["Points"]["1"] = pos_points
-        if neg_points:
-            coordinates_dict["Points"]["0"] = neg_points
+            pos_points = points.get("1")
+            neg_points = points.get("0")
+            
+            if pos_points:
+                coordinates_dict["Points"]["1"] = pos_points
+            if neg_points:
+                coordinates_dict["Points"]["0"] = neg_points
             
 
     def remove_damages_from_json(self, damage_list, frame_key=None):

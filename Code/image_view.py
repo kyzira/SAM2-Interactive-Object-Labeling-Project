@@ -66,11 +66,23 @@ class ImageView:
     def add_to_data(self, observation, observation_data):
         self.__data[observation] = observation_data
 
-    def draw(self, button_states: dict):
+    def add_to_observation(self, observation, type, data):
+        # For Example add to BBA 0, "Mask Polygon" following Polygon
+        if observation not in self.__data:
+            self.__data[observation] = {} 
+        self.__data[observation][type] = data
+
+    def draw(self, button_states: dict, intervals: list):
         self.reset_drawn_image()
 
         shown_observation = []
         selected_observation = None
+
+        num_of_intervall = 0
+        frame_num = self.get_frame_num()
+        for num, (start, end) in enumerate(intervals):
+            if start <= frame_num <= end:
+                num_of_intervall = num
 
         for observation, values in button_states.items():
             if values.get("Visible"):
@@ -83,7 +95,8 @@ class ImageView:
                 continue
 
             if observation_data.get("Mask Polygon"):
-                self.draw_polygon(polygons=observation_data["Mask Polygon"], color=button_states[observation].get("Color"))
+                if len(observation_data.get("Mask Polygon")) > 0:
+                    self.draw_polygon(polygons=observation_data["Mask Polygon"], color=button_states[observation].get("Color"))
             
             if self.__borders.get("Marked"):
                 self.draw_border(side="top", color="red_full")
@@ -98,9 +111,9 @@ class ImageView:
                 continue
 
             if self.__borders[observation].get("Border Left"):
-                self.draw_border(side="left", color="blue_full")
+                self.draw_border(side="left", num_of_intervall=num_of_intervall)
             if self.__borders[observation].get("Border Right"):
-                self.draw_border(side="right", color="blue_full")
+                self.draw_border(side="right", num_of_intervall=num_of_intervall)
             if self.__borders[observation].get("First Frame"):
                 self.draw_border(side="all", color="yellow_full", thickness=15)
 
@@ -109,8 +122,8 @@ class ImageView:
         overlay = Image.new("RGBA", self.img_size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay)
 
-        pos_points = points_dict.get("1")
-        neg_points = points_dict.get("0")
+        pos_points = points_dict.get("1", [])
+        neg_points = points_dict.get("0", [])
 
         for point in pos_points:
             x, y = point
@@ -123,9 +136,13 @@ class ImageView:
         base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
         self.__drawn_image = base_img
 
-    def draw_border(self, side="all", color="red", thickness=20):
+    def draw_border(self, side="all", color=None, num_of_intervall=0, thickness=20):
         base_img = self.__drawn_image
-        color = self.__get_color(color)
+        if color:
+            color = self.__get_color(color)
+        elif num_of_intervall >= 0:
+            color = self.__get_split_color(num_of_intervall)
+            
         img_width, img_height = self.img_size
 
         # Ensure thickness is not larger than image size
@@ -193,6 +210,7 @@ class ImageView:
 
     def draw_and_convert_masks(self, mask, color="red") -> list:
         polygons = []
+        self.reset_drawn_image()
 
         mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1
         
@@ -212,6 +230,11 @@ class ImageView:
         self.draw_polygon(polygons, color)
 
         return polygons
+    
+    def pop_observation(self, observation):
+        if observation in self.__data:
+            return self.__data.pop(observation)
+
 
     def reset_drawn_image(self):
         self.__drawn_image = self.__image.copy()
@@ -232,3 +255,14 @@ class ImageView:
         }
 
         return color_map.get(color)  # Default to red if the color is not found
+    
+    def __get_split_color(self, num):
+        color_map = [
+            (0, 0, 64, 255),         # dark navy (darker version of navy)
+            (65, 105, 225, 255),     # mediumblue (darker version of lightblue)
+            (34, 139, 34, 255),      # forestgreen (darker version of lightgreen)
+            (0, 139, 139, 255),      # darkcyan (darker version of cyan)
+            (75, 0, 130, 255),       # indigo (darker version of blueviolet)
+            (139, 0, 139, 255)       # darkviolet (darker version of mediumvioletred)
+        ]
+        return color_map[num%6]

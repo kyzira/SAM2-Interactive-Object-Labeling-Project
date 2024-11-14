@@ -175,9 +175,6 @@ class AnnotationWindow:
         if not len(self.points["1"]) and not len(self.points["0"]):
             return
         
-        
-        self.img_view.reset_drawn_image()
-
         masks = self.__propagate_image()  # Get the mask from your existing propagate method
         self.polygons = self.img_view.draw_and_convert_masks(masks, self.color)
         self.img_view.draw_points(self.points)

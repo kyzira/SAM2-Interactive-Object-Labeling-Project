@@ -128,3 +128,137 @@ class Sam:
                     )
 
         return video_segments
+    
+
+    def propagate_through_interval(self, frames, button_states, start: int, end: int) -> dict:
+        if not self.initialized:
+            print("Error: SAM not Initialized!")
+            return
+        
+
+        print(f"Start Frame Num {start} until {end}")
+        object_class_id = 0
+        selected_observation = None
+
+        for observation, button in button_states.items():
+            if button.get("Selected") == True:
+                selected_observation = observation
+                break
+            else:
+                object_class_id += 1
+
+        print(f"Tracking Object {selected_observation}, with id {object_class_id}")
+
+        new_frame_list = []
+        frames_with_points = []
+
+        # Collect frames within the interval and check for points on the selected observation
+        for frame_index, img_view in enumerate(frames):
+            if start <= frame_index <= end:
+                new_frame_list.append(img_view)
+                data = img_view.get_data()
+
+                if not data.get(selected_observation):
+                    continue
+
+                # Check if there are positive or negative points for this observation
+                if "Points" not in data[selected_observation]:
+                    continue
+
+                pos = data[selected_observation]["Points"].get("1")
+                neg = data[selected_observation]["Points"].get("0")
+
+                if pos or neg:
+                    frames_with_points.append(frame_index)
+
+        if not frames_with_points:
+            print("No frames with points found in the specified interval.")
+            return
+
+        # Identify the middle frame of frames_with_points
+        middle_index = frames_with_points[len(frames_with_points) // 2]
+        middle_frame = frames[middle_index]
+
+
+
+        # Reset SAM and add points from the middle frame
+        self.reset_predictor_state()
+
+        middle_frame_data = middle_frame.get_data()[selected_observation]
+        points = []
+        labels = []
+
+        # Add points for key "1" if it exists
+        if "1" in middle_frame_data["Points"]:
+            points += middle_frame_data["Points"]["1"]
+            labels += [1] * len(middle_frame_data["Points"]["1"])
+
+        # Add points for key "0" if it exists
+        if "0" in middle_frame_data["Points"]:
+            points += middle_frame_data["Points"]["0"]
+            labels += [0] * len(middle_frame_data["Points"]["0"])
+
+        
+        self.add_point(
+            {"Points": points, "Labels": labels, "Image Index": middle_index},
+            object_class_id=object_class_id
+        )
+
+        # Add all other points
+        for index in frames_with_points:
+            if index == middle_index:
+                continue
+
+            frame_data = frames[index].get_data()[selected_observation]
+            points = []
+            labels = []
+
+            # Add points for key "1" if it exists
+            if "1" in frame_data["Points"]:
+                points += frame_data["Points"]["1"]
+                labels += [1] * len(frame_data["Points"]["1"])
+
+            # Add points for key "0" if it exists
+            if "0" in frame_data["Points"]:
+                points += frame_data["Points"]["0"]
+                labels += [0] * len(frame_data["Points"]["0"])
+
+            
+            self.add_point(
+                {"Points": points, "Labels": labels, "Image Index": middle_index},
+                object_class_id=object_class_id
+            )
+
+        # Calculate max_frame_num_to_track based on interval limits
+        
+        max_frame_num_to_track_forwards = end - middle_index
+        max_frame_num_to_track_backwards = middle_index - start
+
+        # Track forward and backward from the middle frame within the interval
+        video_segments = dict()
+        
+        # Forward tracking from the middle frame
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
+            self.inference_state, start_frame_idx=middle_index, max_frame_num_to_track=max_frame_num_to_track_forwards
+        ):
+            video_segments[out_frame_idx] = {
+                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                for i, out_obj_id in enumerate(out_obj_ids)
+            }
+
+        # Backward tracking within the interval
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
+            self.inference_state, start_frame_idx=middle_index, max_frame_num_to_track=max_frame_num_to_track_backwards, reverse=True
+        ):
+            if out_frame_idx not in video_segments:
+                video_segments[out_frame_idx] = {}
+            for i, out_obj_id in enumerate(out_obj_ids):
+                if out_obj_id not in video_segments[out_frame_idx]:
+                    video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
+                else:
+                    video_segments[out_frame_idx][out_obj_id] = np.maximum(
+                        video_segments[out_frame_idx][out_obj_id],
+                        (out_mask_logits[i] > 0.0).cpu().numpy()
+                    )
+
+        return video_segments
