@@ -37,6 +37,9 @@ class ImageView:
     
     def get_data(self):
         return self.__data.copy()
+    
+    def get_image_size(self):
+        return self.__image.size
 
     def get_border_value(self, observation: str, border = None):
         if border:

@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog
+from tkinter import simpledialog, ttk
 from PIL import Image, ImageTk
 import os
 from image_view import ImageView
@@ -11,6 +11,7 @@ from frame_extraction import FrameExtraction
 
 class ImageGridApp:
     def __init__(self, root, sam_model, next_callback, start_observation = None):
+        super().__init__()
         self.root = root
         self.root.title("Grid SAM Labeling Tool")
 
@@ -77,8 +78,7 @@ class ImageGridApp:
                 image_view = ImageView(file_path)
                 self.frames.append(image_view)
         
-        self.root.after(100, self.draw_images_on_grid)
-        self.create_bottom_row_widgets(slider_max=(len(self.frames) - (self.grid_size * self.grid_size)))
+        self.root.after(100, self.create_image_grid)
 
     def init_settings(self, settings:dict):
         window_width = settings.get("window_width", 800)
@@ -128,10 +128,9 @@ class ImageGridApp:
     def init_frame_extraction_buttons(self, frame_extraction: FrameExtraction, extract_seconds_buttons_enable: bool):
         self.frame_extraction = frame_extraction
 
-        self.extract_from_video = tk.Button(self.bottom_frame, text="Extract from Video", command=lambda: self.open_extraction_window(), height=2, width=20).pack(side="right", padx=5, pady=5)
         if extract_seconds_buttons_enable:
-            self.extract_forwards = tk.Button(self.bottom_frame, text="> +10s", command=lambda: self.on_extract_frames(10), height=2, width=10).pack(side="right", padx=5, pady=5)
-            self.extract_backwards = tk.Button(self.bottom_frame, text="+10s <", command=lambda: self.on_extract_frames(-10), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(-10), height=2, width=10).pack(side="right", padx=5, pady=5)
 
 
     def create_widgets(self):
@@ -150,7 +149,7 @@ class ImageGridApp:
         # Add options to change grid size
         grid_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Grid Options", menu=grid_menu)
-        grid_menu.add_command(label="Reload Grid", command=self.draw_images_on_grid)
+        grid_menu.add_command(label="Reload Grid", command=self.create_image_grid)
         grid_menu.add_command(label="Redraw Images", command=self.draw_overlays_on_image_views)
         grid_menu.add_command(label="Change Grid Size", command=self.prompt_grid_size)
 
@@ -168,33 +167,48 @@ class ImageGridApp:
         left_click_menu.add_command(label="Delete Label", command=lambda n="Deleting": self.set_left_click_mode(n))
 
         # Top frame
-        self.first_row_frame = tk.Frame(self.root, bg="lightgrey", height=50)
-        self.first_row_frame.grid(row=0, column=0, sticky="nsew")
+        self.first_frame = tk.Frame(self.root, bg="lightgrey", height=50)
+        self.first_frame.grid(row=0, column=0, sticky="nsew")
         self.root.grid_columnconfigure(0, weight=1)  # Configure column weight
 
-        # Additional frame next to the first row frame
-        self.second_half_frame = tk.Frame(self.root, bg="lightgrey", height=50)
-        self.second_half_frame.grid(row=0, column=1, sticky="nsew")
-        self.root.grid_columnconfigure(1, weight=1)  # Configure column weight
-        self.create_second_half_widgets()
-        
-
         # second frame
-        self.second_row_frame = tk.Frame(self.root, bg="lightgrey", height=50)
-        self.second_row_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
-        self.second_row_frame.grid_columnconfigure(0, weight=1)        
+        self.second_frame = tk.Frame(self.root, bg="lightgrey", height=50)
+        self.second_frame.grid(row=1, column=0, columnspan=2, sticky="nsew")
+        self.second_frame.grid_columnconfigure(0, weight=1)        
 
         # Middle frame for images with dynamic grid
         self.middle_frame = tk.Frame(self.root, bg="white")
         self.middle_frame.grid(row=2, column=0, columnspan=2, sticky="nsew")
-        
-        # Bottom frame
-        self.bottom_frame = tk.Frame(self.root, bg="lightgrey", height=50)
-        self.bottom_frame.grid(row=3, column=0, columnspan=2, sticky="nsew")
 
+        # Canvas and scrollbar setup
+        self.canvas = tk.Canvas(self.middle_frame, highlightthickness=0)
+        self.scrollbar = ttk.Scrollbar(self.middle_frame, orient="vertical", command=self.canvas.yview)
+
+        # Place canvas to fill the width of the window
+        self.canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Place scrollbar to the right of the canvas without overlapping
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Scrollable frame within canvas
+        self.scrollable_frame = tk.Frame(self.canvas)
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+
+        self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+
+        # Bind mouse wheel scrolling
+        self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
+
+        # Handle window resizing
+        self.middle_frame.bind("<Configure>", self.resize_images)
+        
 
     def create_first_row_widgets(self):
-        for widget in self.first_row_frame.winfo_children():
+        for widget in self.first_frame.winfo_children():
             widget.destroy()
 
         first_button_selected = False
@@ -205,7 +219,7 @@ class ImageGridApp:
 
             # Create the button
             button = tk.Button(
-                self.first_row_frame,
+                self.first_frame,
                 text=observation,
                 command=lambda n=observation: self.on_observation_button_pressed(n),
                 height=2,
@@ -230,19 +244,16 @@ class ImageGridApp:
             self.button_states[first_observation]["Button"].config(relief="sunken")
             self.selected_observation = first_observation
 
-    def create_second_half_widgets(self):
+
         # Create the button
-        self.next_button = tk.Button(self.second_half_frame, text="Next", command=lambda: self.close_window(), height=2, width=10).pack(side="right", padx=5, pady=5)
-        self.skip_button = tk.Button(self.second_half_frame, text="Skip", command=lambda: self.close_window(skip=True), height=2, width=10).pack(side="right", padx=5, pady=5)
-        self.start_tracking_button = tk.Button(self.second_half_frame, text="Start Tracking", command=lambda: self.track_object_in_video(), height=2, width=10, bg="palegreen").pack(side="right", padx=25, pady=5)
-
-        self.add_split_button = tk.Button(self.second_half_frame, text="Add new Split", command=lambda n="Splitting": self.set_left_click_mode(n), height=2, width=10, bg="lightblue").pack(side="right", padx=25, pady=5)
-
-
+        self.next_button = tk.Button(self.first_frame, text="Next", command=lambda: self.close_window(), height=2, width=10, bg="indianred").pack(side="right", padx=5, pady=5)
+        self.skip_button = tk.Button(self.first_frame, text="Skip", command=lambda: self.close_window(skip=True), height=2, width=10, bg="indianred").pack(side="right", padx=5, pady=5)
+        self.start_tracking_button = tk.Button(self.first_frame, text="Start Tracking", command=lambda: self.track_object_in_video(), height=2, width=10, bg="palegreen").pack(side="right", padx=5, pady=5)
+        self.add_split_button = tk.Button(self.first_frame, text="Add new Split", command=lambda n="Splitting": self.set_left_click_mode(n), height=2, width=10, bg="lightblue").pack(side="right", padx=5, pady=5)
 
 
     def create_second_row_widgets(self):
-        for widget in self.second_row_frame.winfo_children():
+        for widget in self.second_frame.winfo_children():
             widget.destroy()
 
         colors = [
@@ -258,7 +269,7 @@ class ImageGridApp:
             color = colors[idx % len(colors)]  # Cycle colors if there are more observations
             
             button = tk.Button(
-                self.second_row_frame,
+                self.second_frame,
                 bg=color,
                 command=lambda n=observation: self.on_visibility_button_pressed(n),
                 height=2,
@@ -278,17 +289,13 @@ class ImageGridApp:
                 self.button_states[observation]["Visibility Button"].config(relief="sunken", bg=color)
 
             self.button_states[observation]["Color"] = color
+        
+        self.extract_from_video = tk.Button(self.second_frame, text="Extract from Video", command=lambda: self.open_extraction_window(), height=2, width=23).pack(side="right", padx=5, pady=5)
 
 
 
-    def create_bottom_row_widgets(self, slider_max=0):
-        for widget in self.bottom_frame.winfo_children():
-            widget.destroy()
-        # Slider for image navigation
-        self.slider = tk.Scale(self.bottom_frame, from_=0, to=slider_max, orient="horizontal", command=self.on_slider_change, length=200)
-        self.slider.pack(side="left", padx=10, pady=10)
-        tk.Button(self.bottom_frame, text="<", command=lambda: self.set_scale_value(add_value=-int(self.grid_size)), width=5).pack(side="left", pady=10, padx=5)
-        tk.Button(self.bottom_frame, text=">", command=lambda: self.set_scale_value(add_value=int(self.grid_size)), width=5).pack(side="left", pady=10, padx=5)
+
+        
         
     def add_observation(self, observation=None):
         if observation == None:
@@ -347,7 +354,7 @@ class ImageGridApp:
         col = event.widget.grid_info()["column"]
 
         # Rest of the function code
-        img_index = (self.slider.get()) + (col) + (row * self.grid_size)
+        img_index = (col) + (row * self.grid_size)
         print(f"Clicked Image Index: {img_index}")
         
         
@@ -409,10 +416,7 @@ class ImageGridApp:
 
                         img_view.set_border(self.selected_observation, "Border Left", False)
                         img_view.set_border(self.selected_observation, "Border Right", False)
-
                         img_view.pop_observation(self.selected_observation)
-                        img_view.draw(self.button_states)
-
 
                     self.reset_left_click_modes(event)
                     break
@@ -450,7 +454,6 @@ class ImageGridApp:
         # Check if the Ctrl key is held down during the scroll
         ctrl_pressed = event.state & 0x4  # Check if Ctrl is pressed (0x4 is the mask for Ctrl)
 
-
         if ctrl_pressed:
             if event.delta < 0:
                 if self.grid_size < self.max_grid_size:
@@ -458,18 +461,16 @@ class ImageGridApp:
             else:
                 if self.grid_size > 1:
                     self.grid_size -= 1
-            self.draw_images_on_grid()
-        else:
-            if self.grid_size == self.max_grid_size:
-                return
-            
-            if event.delta > 0:
-                self.set_scale_value(add_value=1)
-            else:
-                self.set_scale_value(add_value=-1)
+            self.create_image_grid()
+
+
+    def on_mousewheel(self, event):
+        # Enable mousewheel scrolling
+        self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
     def on_slider_change(self, value):
-        self.draw_images_on_grid(value)
+        # self.draw_images_on_grid(value)
+        print
 
     def on_annotation_window_close(self):
         # save settings
@@ -580,8 +581,8 @@ class ImageGridApp:
         self.annotation_window.annotation_window.mainloop()
 
     def set_left_click_mode(self, mode):
-        self.middle_frame.config(background=self.left_click_mode_colors.get(mode, "goldenrod"))
-
+        self.first_frame.config(background=self.left_click_mode_colors.get(mode, "goldenrod"))
+        self.second_frame.config(background=self.left_click_mode_colors.get(mode, "goldenrod"))
         for key in self.left_click_modes.keys():
             if key == mode:
                 self.left_click_modes[key] = True
@@ -594,104 +595,47 @@ class ImageGridApp:
 
         self.split_start = None
         self.split_end = None
-        self.middle_frame.config(background="white")
-
-        
-
-    def update_grid(self, grid_size=None):
-        if grid_size is None:
-            grid_size = self.grid_size
-        else:
-            self.grid_size = grid_size
-        
-        try:
-            # Clear existing widgets in the middle frame
-            if self.middle_frame:
-                for widget in self.middle_frame.winfo_children():
-                    widget.destroy()
-
-            # Calculate cell dimensions based on middle_frame's current size
-            cell_width = self.middle_frame.winfo_width() // grid_size
-            cell_height = self.middle_frame.winfo_height() // grid_size
-
-            if cell_width < 1 or cell_height < 1:
-                print("Invalid cell dimensions, skipping grid update")
-                return False
-
-            # Configure grid rows and columns
-            for r in range(self.grid_size):
-                self.middle_frame.grid_rowconfigure(r, weight=1)
-                for c in range(self.grid_size):
-                    self.middle_frame.grid_columnconfigure(c, weight=1)
-
-            images_on_grid = self.grid_size * self.grid_size
-            amount_of_images = len(self.frames)
-
-            self.slider.config(to= amount_of_images-images_on_grid)
-            
-
-            return cell_width, cell_height  # Return cell dimensions for use in draw_images_on_grid
-        except:
-            return 1, 1
+        self.first_frame.config(background="lightgrey")
+        self.second_frame.config(background="lightgrey")
     
     def draw_overlays_on_image_views(self):
         intervals = self.split_intervals.get(self.selected_observation, [])
         for image_view in self.frames:
             image_view.draw(self.button_states, intervals)
         
-        self.root.after(200, self.draw_images_on_grid)
+        self.root.after(200, self.create_image_grid)
 
 
-    def draw_images_on_grid(self, start_index=0):
-        cell_dimensions = self.update_grid()
-        if not cell_dimensions:
-            return  # If grid update failed, exit early
-
-        cell_width, cell_height = cell_dimensions
-        image_count = len(self.frames)
-
-        # Store references to images to prevent garbage collection
+    def create_image_grid(self):
         self.image_references = []
 
-        # Set start index from slider if not specified
-        try:
-            if start_index:
-                start_index = int(start_index)
-            else:
-                start_index = self.slider.get()
-        except:
-            return
+        orig_width, orig_height = self.frames[0].get_image_size()
+        ratio = orig_height/orig_width
 
-        # Ensure we do not exceed the number of available images
-        if start_index + self.grid_size * self.grid_size > image_count:
-            if self.grid_size != self.max_grid_size:
+        canvas_width = self.canvas.winfo_width()
+        cell_width = max((canvas_width - self.grid_size*9)//self.grid_size, 1)
+
+        # Clear the scrollable_frame before adding new labels
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        for i, img_view in enumerate(self.frames):
+            image = img_view.get_drawn_image()
+            try:
+                image = image.resize((cell_width, int(cell_width*ratio)), Image.Resampling.LANCZOS)
+            except:
                 return
+            photo = ImageTk.PhotoImage(image)
 
-        # Populate grid with images or "No Image" placeholders
-        image_index = 0
-        for r in range(self.grid_size):
-            for c in range(self.grid_size):
-                if image_index < image_count:
-                    # Load and resize the image
-                    image = self.frames[image_index + start_index].get_drawn_image()
-                    image = image.resize((cell_width, cell_height), Image.Resampling.LANCZOS)
-                    photo = ImageTk.PhotoImage(image)
+            # Store the reference to the image
+            self.image_references.append(photo)
 
-                    # Store the reference to the image
-                    self.image_references.append(photo)
+            label = tk.Label(self.scrollable_frame, image=photo)
+            label.grid(row=i // self.grid_size, column=i % self.grid_size, padx=2, pady=2, sticky="nsew")
+            label.bind("<Button-1>", self.on_image_left_click)  # Bind click event
 
-                    # Create a label with the image
-                    label = tk.Label(self.middle_frame, image=photo, borderwidth=1, relief="solid")
-                    label.grid(row=r, column=c, sticky="nsew", padx=1, pady=1)
-
-                    # Bind click event to each label
-                    label.bind("<Button-1>", self.on_image_left_click)
-
-                    image_index += 1
-                else:
-                    # Display "No Image" text if no image is available
-                    label = tk.Label(self.middle_frame, text="No Image", borderwidth=1, relief="solid", anchor="center")
-                    label.grid(row=r, column=c, sticky="nsew", padx=1, pady=1)
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            
 
 
     def prompt_grid_size(self):
@@ -699,7 +643,7 @@ class ImageGridApp:
         grid_size = simpledialog.askinteger("Grid Size", "Enter Grid Size:", minvalue=1, maxvalue=10)
         if grid_size:
             self.grid_size = grid_size
-            self.draw_images_on_grid()
+            self.create_image_grid()
 
     def set_scale_value(self, value=None, add_value=None):
         max_value = self.slider.cget("to")
@@ -712,6 +656,10 @@ class ImageGridApp:
             self.slider.set(value)
 
         self.on_slider_change(value)
+
+    def resize_images(self, event=None):
+        self.create_image_grid()
+
 
     def reinit_sam(self):
         self.sam_model.init_predictor_state()
@@ -761,6 +709,8 @@ class ImageGridApp:
                 )
                 if video_segments:
                     all_video_segments.update(video_segments)  # Merge results
+
+                self.sam_model.reset_predictor_state()
 
         
 
