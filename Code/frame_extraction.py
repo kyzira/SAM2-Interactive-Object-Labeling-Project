@@ -19,7 +19,7 @@ class FrameExtraction:
 
     def extract_from_video_player(self):
         root = tk.Toplevel()
-        player = VideoPlayer(root, self.video_path, self.start_frame)
+        player = VideoPlayer(root, self.video_path, self.start_second)
         root.mainloop()
         try:
             if root.winfo_exists():

@@ -383,11 +383,11 @@ class MainWindow:
                         self.reset_left_click_modes()
                         return
 
-            # If not returned because selected point in other split:
             if self.split_start is None:
                 self.split_start = img_index
                 self.frames[img_index].set_border(self.selected_observation, "Border Left", True)
                 self.frames[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
+                
                 
             elif self.split_end is None:
                 if img_index >= self.split_start:
@@ -397,6 +397,7 @@ class MainWindow:
                     intervall_list = self.split_intervals.get(self.selected_observation, [])
                     intervall_list.append((self.frames[self.split_start].get_frame_num(), self.frames[self.split_end].get_frame_num()))
                     self.split_intervals[self.selected_observation] = intervall_list
+                    
                 
                 else:
                     self.frames[self.split_start].set_border(self.selected_observation, "Border Left", False)
@@ -597,11 +598,13 @@ class MainWindow:
         self.second_frame.config(background="lightgrey")
     
     def draw_overlays_on_image_views(self):
-        intervals = self.split_intervals.get(self.selected_observation, [])
-        for image_view in self.frames:
-            image_view.draw(self.button_states, intervals)
-        
-        self.root.after(200, self.create_image_grid)
+        try:
+            intervals = self.split_intervals.get(self.selected_observation, [])
+            for image_view in self.frames:
+                image_view.draw(self.button_states, intervals)
+            
+            self.root.after(200, self.create_image_grid)
+        except: pass
 
 
     def create_image_grid(self):
@@ -631,6 +634,7 @@ class MainWindow:
             label = tk.Label(self.scrollable_frame, image=photo)
             label.grid(row=i // self.grid_size, column=i % self.grid_size, padx=2, pady=2, sticky="nsew")
             label.bind("<Button-1>", self.on_image_left_click)  # Bind click event
+            label.bind("<Button-3>", lambda event: self.set_left_click_mode("Splitting"))
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             
@@ -692,7 +696,7 @@ class MainWindow:
         if self.selected_observation in self.split_intervals.keys() and len(self.split_intervals[self.selected_observation]) > 0:
             # If the selected observation has intervals
             for start, end in self.split_intervals[self.selected_observation]:
-                print(f"Tracking Object {self.selected_observation} form frame {start} to frame {end}!\n\n")
+                print(f"\nTracking Object {self.selected_observation} form frame {start} to frame {end}!\n")
                 # Get Index first:
                 start_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == start), None)
                 end_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == end), None)

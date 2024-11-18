@@ -1,8 +1,9 @@
 import torch
 from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import numpy as np
+import gc
 
-class Sam:
+class Sam2Class:
     def __init__(self, frame_dir, sam_paths):
         # Initialize the predictor as needed
         if not sam_paths:
@@ -135,7 +136,9 @@ class Sam:
             print("Error: SAM not Initialized!")
             return
         
-
+        # Reset SAM and add points from the middle frame
+        self.reset_predictor_state()
+        
         print(f"Start Frame Num {start} until {end}")
         object_class_id = 0
         selected_observation = None
@@ -153,62 +156,34 @@ class Sam:
         frames_with_points = []
 
         # Collect frames within the interval and check for points on the selected observation
-        for frame_index, img_view in enumerate(frames):
-            if start <= frame_index <= end:
-                new_frame_list.append(img_view)
-                data = img_view.get_data()
+        for frame_index in range(start, end):
+            img_view = frames[frame_index]
 
-                if not data.get(selected_observation):
-                    continue
+            new_frame_list.append(img_view)
+            data = img_view.get_data()
 
-                # Check if there are positive or negative points for this observation
-                if "Points" not in data[selected_observation]:
-                    continue
+            if not data.get(selected_observation):
+                continue
 
-                pos = data[selected_observation]["Points"].get("1")
-                neg = data[selected_observation]["Points"].get("0")
+            # Check if there are positive or negative points for this observation
+            if "Points" not in data[selected_observation]:
+                continue
 
-                if pos or neg:
-                    frames_with_points.append(frame_index)
+            pos = data[selected_observation]["Points"].get("1")
+            neg = data[selected_observation]["Points"].get("0")
 
-        if not frames_with_points:
+            if pos or neg:
+                frames_with_points.append(frame_index)
+
+
+        if frames_with_points == []:
             print("No frames with points found in the specified interval.")
             return
 
-        # Identify the middle frame of frames_with_points
-        middle_index = frames_with_points[len(frames_with_points) // 2]
-        middle_frame = frames[middle_index]
+        first_index = frames_with_points[0]
 
-
-
-        # Reset SAM and add points from the middle frame
-        self.reset_predictor_state()
-
-        middle_frame_data = middle_frame.get_data()[selected_observation]
-        points = []
-        labels = []
-
-        # Add points for key "1" if it exists
-        if "1" in middle_frame_data["Points"]:
-            points += middle_frame_data["Points"]["1"]
-            labels += [1] * len(middle_frame_data["Points"]["1"])
-
-        # Add points for key "0" if it exists
-        if "0" in middle_frame_data["Points"]:
-            points += middle_frame_data["Points"]["0"]
-            labels += [0] * len(middle_frame_data["Points"]["0"])
-
-        
-        self.add_point(
-            {"Points": points, "Labels": labels, "Image Index": middle_index},
-            object_class_id=object_class_id
-        )
-
-        # Add all other points
+        # Add all points
         for index in frames_with_points:
-            if index == middle_index:
-                continue
-
             frame_data = frames[index].get_data()[selected_observation]
             points = []
             labels = []
@@ -225,41 +200,38 @@ class Sam:
 
             
             self.add_point(
-                {"Points": points, "Labels": labels, "Image Index": middle_index},
+                {"Points": points, "Labels": labels, "Image Index": first_index},
                 object_class_id=object_class_id
             )
 
         # Calculate max_frame_num_to_track based on interval limits
         
-        max_frame_num_to_track_forwards = end - middle_index
-        max_frame_num_to_track_backwards = middle_index - start
+        max_frame_num_to_track_forwards = end - first_index
+        max_frame_num_to_track_backwards = first_index - start
 
         # Track forward and backward from the middle frame within the interval
         video_segments = dict()
         
         # Forward tracking from the middle frame
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
-            self.inference_state, start_frame_idx=middle_index, max_frame_num_to_track=max_frame_num_to_track_forwards
-        ):
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
+                                                                                             start_frame_idx=first_index, 
+                                                                                             max_frame_num_to_track=max_frame_num_to_track_forwards):
             video_segments[out_frame_idx] = {
                 out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
                 for i, out_obj_id in enumerate(out_obj_ids)
             }
 
-        # Backward tracking within the interval
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(
-            self.inference_state, start_frame_idx=middle_index, max_frame_num_to_track=max_frame_num_to_track_backwards, reverse=True
-        ):
-            if out_frame_idx not in video_segments:
-                video_segments[out_frame_idx] = {}
-            for i, out_obj_id in enumerate(out_obj_ids):
-                if out_obj_id not in video_segments[out_frame_idx]:
-                    video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
-                else:
-                    video_segments[out_frame_idx][out_obj_id] = np.maximum(
-                        video_segments[out_frame_idx][out_obj_id],
-                        (out_mask_logits[i] > 0.0).cpu().numpy()
-                    )
+        if first_index != start:
+            # Backward tracking within the interval
+            for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
+                                                                                                 start_frame_idx=first_index, 
+                                                                                                 max_frame_num_to_track=max_frame_num_to_track_backwards, 
+                                                                                                 reverse=True):
+                if out_frame_idx not in video_segments:
+                    video_segments[out_frame_idx] = {}
+                for i, out_obj_id in enumerate(out_obj_ids):
+                    if out_obj_id not in video_segments[out_frame_idx]:
+                        video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
 
         return video_segments
 
@@ -270,10 +242,13 @@ class Sam:
         """
         try:
             # Delete the predictor to release GPU memory
-            if hasattr(self, "predictor"):
-                del self.predictor
+            self.predictor.reset_state(self.inference_state)
+
+            del self.predictor
+            del self.inference_state
 
             # Clear CUDA cache
+            gc.collect()
             torch.cuda.empty_cache()
             print("Resources cleaned up successfully.")
         except Exception as e:

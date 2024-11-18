@@ -1,7 +1,7 @@
 from main_window import MainWindow
 from table_and_index import TableAndIndex
 from frame_extraction import FrameExtraction
-from sam2_class import Sam
+from sam2_class import Sam2Class
 import tkinter as tk
 from tkinter import filedialog
 import yaml
@@ -33,7 +33,7 @@ def extract_frames(frame_extraction: FrameExtraction, table_row: dict, config: d
 
 def test_mode(config):
     frame_dir = r"C:\Code Python\SAM2-Interactive-Object-Labeling-Project\labeling_project\test folder\source images"
-    sam_model = Sam(frame_dir, config["sam_model_paths"])
+    sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
 
     # Define a function to close the window and update the loop control variable
     def close_window():
@@ -100,9 +100,10 @@ def list_mode(config):
         extract_frames(frame_extraction, table_row, config)
         
 
-        sam_model = Sam(frame_dir, config["sam_model_paths"])
-
+        sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
+        
         root = tk.Tk()
+        
         app = MainWindow(root=root, 
                             sam_model=sam_model, 
                             start_observation=table_row.get("Label"),
@@ -141,7 +142,7 @@ def folder_mode(config):
         if not os.path.isdir(frame_dir):
             continue
 
-        sam_model = Sam(frame_dir, config["sam_model_paths"])
+        sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
 
 
         # Initialize the flag for each iteration of the loop
