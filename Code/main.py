@@ -1,4 +1,4 @@
-from main_window import ImageGridApp
+from main_window import MainWindow
 from table_and_index import TableAndIndex
 from frame_extraction import FrameExtraction
 from sam2_class import Sam
@@ -20,6 +20,10 @@ def extract_frames(frame_extraction: FrameExtraction, table_row: dict, config: d
     sekunde_zeitpunkt = int(video_zeitpunkt[0]) * 60 * 60 + int(video_zeitpunkt[1]) * 60 + int(video_zeitpunkt[2])
     start_zeitpunkt = sekunde_zeitpunkt - config["settings"].get("frame_extraction_puffer_before", 60)
     end_zeitpunkt = sekunde_zeitpunkt + config["settings"].get("frame_extraction_puffer_after", 10)
+
+    frame_extraction.start_second = start_zeitpunkt
+    frame_extraction.end_second = end_zeitpunkt
+
     try:
         frame_extraction.extract_frames_by_damage_time(start_zeitpunkt, end_zeitpunkt, config["settings"].get("extraction_frame_per_frames", 25))
         return True
@@ -36,13 +40,14 @@ def test_mode(config):
         app.save_to_json()
         app.root.destroy()
         print("Grid Window closed and data saved to Json")
+        app.remove_image_view()
 
     # Define the callback function that will trigger the next loop iteration
     def run_next_loop():
         close_window()  # Close the current window 
 
     root = tk.Tk()
-    app = ImageGridApp(root, sam_model, run_next_loop)
+    app = MainWindow(root, sam_model, run_next_loop)
     app.init_frames(frame_dir)
     app.init_settings(settings=config["settings"])
     app.init_json(config["test_mode_table"])
@@ -61,6 +66,7 @@ def list_mode(config):
         app.save_to_json()
         app.root.destroy()
         print("Grid Window closed and data saved to Json")
+        app.remove_image_view()
 
     table_and_index = TableAndIndex(config["default_paths"])
 
@@ -71,7 +77,7 @@ def list_mode(config):
     while next_run and current_index < max_index:
         # Initialize the flag for each iteration of the loop
         next_run = False
-
+        app = None
         # Define the callback function that will trigger the next loop iteration
         def run_next_loop():
             nonlocal next_run
@@ -97,7 +103,7 @@ def list_mode(config):
         sam_model = Sam(frame_dir, config["sam_model_paths"])
 
         root = tk.Tk()
-        app = ImageGridApp(root=root, 
+        app = MainWindow(root=root, 
                             sam_model=sam_model, 
                             start_observation=table_row.get("Label"),
                             next_callback=run_next_loop)
@@ -113,6 +119,9 @@ def list_mode(config):
 
         current_index = table_and_index.increment_and_save_current_index(current_index)
 
+        del sam_model
+        del app
+
 
 
 def folder_mode(config):
@@ -121,11 +130,13 @@ def folder_mode(config):
         app.save_to_json()
         app.root.destroy()
         print("Grid Window closed and data saved to Json")
+        app.remove_image_view()
 
-    over_dir = filedialog.askdirectory(title="Select the Directory with the labelled folders inside",initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+    results_dir = filedialog.askdirectory(title="Select the results Directory",initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-    for folder_name in os.listdir(over_dir):
-        frame_dir = os.path.join(over_dir, folder_name) 
+    for folder_name in os.listdir(results_dir):
+        result_path = os.path.join(results_dir, folder_name) 
+        frame_dir = os.path.join(result_path,"source images")
 
         if not os.path.isdir(frame_dir):
             continue
@@ -144,7 +155,7 @@ def folder_mode(config):
 
 
         root = tk.Tk()
-        app = ImageGridApp(root=root, 
+        app = MainWindow(root=root, 
                             sam_model=sam_model, 
                             next_callback=run_next_loop)
         app.init_frames(frame_dir)
@@ -153,7 +164,6 @@ def folder_mode(config):
         app.init_add_observations_menu(config["object_add_buttons"])
         app.draw_overlays_on_image_views()
         app.root.protocol("WM_DELETE_WINDOW", close_window)
-
         root.mainloop()  # Start the Tkinter event loop
 
         if not next_run:

@@ -9,7 +9,7 @@ from json_read_write import JsonReadWrite
 from frame_extraction import FrameExtraction
 
 
-class ImageGridApp:
+class MainWindow:
     def __init__(self, root, sam_model, next_callback, start_observation = None):
         super().__init__()
         self.root = root
@@ -60,6 +60,7 @@ class ImageGridApp:
         self.split_start = None
         self.split_end = None
 
+        self.is_init_completed = False
 
         self.annotation_window_geometry_data = {
             "Maximized" : False,
@@ -129,8 +130,11 @@ class ImageGridApp:
         self.frame_extraction = frame_extraction
 
         if extract_seconds_buttons_enable:
-            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10), height=2, width=10).pack(side="right", padx=5, pady=5)
-            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(-10), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10, False), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(10, True), height=2, width=10).pack(side="right", padx=5, pady=5)
+
+    def init_complete(self):
+        self.is_init_completed = True
 
 
     def create_widgets(self):
@@ -293,10 +297,6 @@ class ImageGridApp:
         self.extract_from_video = tk.Button(self.second_frame, text="Extract from Video", command=lambda: self.open_extraction_window(), height=2, width=23).pack(side="right", padx=5, pady=5)
 
 
-
-
-        
-        
     def add_observation(self, observation=None):
         if observation == None:
             observation = simpledialog.askstring("Add Observation", "Add Observation:")
@@ -368,7 +368,7 @@ class ImageGridApp:
                 self.marked_frames.remove(self.frames[img_index].get_frame_num())
                 print(self.marked_frames)
                 self.frames[img_index].set_border(self.selected_observation, "Marked", False)
-                self.frames[img_index].draw(self.button_states)
+                self.frames[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
 
 
         elif self.left_click_modes.get("Splitting"):
@@ -387,17 +387,20 @@ class ImageGridApp:
             if self.split_start is None:
                 self.split_start = img_index
                 self.frames[img_index].set_border(self.selected_observation, "Border Left", True)
+                self.frames[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
                 
             elif self.split_end is None:
-                self.split_end = img_index
-                self.frames[img_index].set_border(self.selected_observation, "Border Right", True)
+                if img_index >= self.split_start:
+                    self.split_end = img_index
+                    self.frames[img_index].set_border(self.selected_observation, "Border Right", True)
+                    
+                    intervall_list = self.split_intervals.get(self.selected_observation, [])
+                    intervall_list.append((self.frames[self.split_start].get_frame_num(), self.frames[self.split_end].get_frame_num()))
+                    self.split_intervals[self.selected_observation] = intervall_list
                 
-                intervall_list = self.split_intervals.get(self.selected_observation, [])
-                intervall_list.append((self.frames[self.split_start].get_frame_num(), self.frames[self.split_end].get_frame_num()))
-                self.split_intervals[self.selected_observation] = intervall_list
+                else:
+                    self.frames[self.split_start].set_border(self.selected_observation, "Border Left", False)
 
-                self.split_start = None
-                self.split_end = None
                 self.reset_left_click_modes(event)
 
         elif self.left_click_modes.get("Delete Split"):
@@ -425,7 +428,7 @@ class ImageGridApp:
             img_view = self.frames[img_index]
             img_view.pop_observation(self.selected_observation)
             print(f"Popped {self.selected_observation} from frame {img_view.get_frame_num()}")
-            img_view.draw(self.button_states)
+            img_view.draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
         else:
             intervall_list = self.split_intervals.get(self.selected_observation, [])
             if len(intervall_list) == 0:
@@ -525,13 +528,8 @@ class ImageGridApp:
         
         self.draw_overlays_on_image_views()
 
-    def on_extract_frames(self, time):
-        reverse = False
-        if time < 0:
-            reverse = True
-            time = -time
-        
-        self.frame_extraction.extract_further(extra_seconds_to_extract=time, reverse=reverse)
+    def on_extract_frames(self, time, reverse=False):
+        self.frame_extraction.extract_further(extra_seconds_to_extract=abs(time), reverse=reverse)
 
         self.reinit_frames()
         self.reinit_sam()
@@ -694,6 +692,7 @@ class ImageGridApp:
         if self.selected_observation in self.split_intervals.keys() and len(self.split_intervals[self.selected_observation]) > 0:
             # If the selected observation has intervals
             for start, end in self.split_intervals[self.selected_observation]:
+                print(f"Tracking Object {self.selected_observation} form frame {start} to frame {end}!\n\n")
                 # Get Index first:
                 start_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == start), None)
                 end_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == end), None)
@@ -745,6 +744,11 @@ class ImageGridApp:
 
         self.json_read_write.save_json_to_file()
 
+    def remove_image_view(self):
+        for frame in self.frames:
+            frame.close_image_view()
+
+        self.frames = None
 
     def close_window(self, skip=False):
         if skip:

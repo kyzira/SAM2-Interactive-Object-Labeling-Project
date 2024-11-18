@@ -262,3 +262,25 @@ class Sam:
                     )
 
         return video_segments
+
+
+    def cleanup(self):
+        """
+        Clean up GPU resources by deleting the predictor and clearing CUDA cache.
+        """
+        try:
+            # Delete the predictor to release GPU memory
+            if hasattr(self, "predictor"):
+                del self.predictor
+
+            # Clear CUDA cache
+            torch.cuda.empty_cache()
+            print("Resources cleaned up successfully.")
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+
+    def __del__(self):
+        """
+        Ensure cleanup is performed when the object is destroyed.
+        """
+        self.cleanup()

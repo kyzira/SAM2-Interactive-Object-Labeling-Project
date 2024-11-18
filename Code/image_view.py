@@ -242,6 +242,12 @@ class ImageView:
     def reset_drawn_image(self):
         self.__drawn_image = self.__image.copy()
 
+    def close_image_view(self):
+        self.__data = None
+        self.__image = None
+        self.__drawn_image = None
+        self.img_size = None
+        self.__borders = None
 
     def __get_color(self, color="red"):
         color_map = {

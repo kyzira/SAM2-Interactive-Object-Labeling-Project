@@ -13,8 +13,8 @@ class FrameExtraction:
         self.video_path = video_path
         self.output_dir = output_dir
         self.similarity_threshold = similarity_threshold
-        self.start_frame = None
-        self.end_frame = None
+        self.start_second = None
+        self.end_second = None
         self.fps = None
 
     def extract_from_video_player(self):
@@ -31,9 +31,6 @@ class FrameExtraction:
             pass
 
         return 0, 0
-
-        
-        
 
     def extract_frames_by_damage_time(self, start_seconds: int, end_seconds: int, frame_rate: int):
 
@@ -53,9 +50,6 @@ class FrameExtraction:
 
     def extract_frames(self, start_frame: int, end_frame: int, frame_rate: int) -> bool:
 
-
-        self.start_frame = int(max(start_frame, 0))
-        self.end_frame = int(end_frame)
         last_frame = None
         
         cap = cv2.VideoCapture(self.video_path)
@@ -66,8 +60,9 @@ class FrameExtraction:
         # Get total number of frames
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print(f"Total frames in video: {total_frames}")
-        if self.end_frame > total_frames:
-            self.end_frame = total_frames
+
+        start_frame = max(start_frame, 0)
+        end_frame = min(end_frame, total_frames)
 
         print(f"Extracting frames from {start_frame} to {end_frame}.")
 
@@ -95,27 +90,20 @@ class FrameExtraction:
         return True
     
     def extract_further(self, extra_seconds_to_extract: int, reverse = False):
-
-        if not(self.start_frame or self.end_frame):
+        if not(self.start_second or self.end_second):
             return
-        
-        cap = cv2.VideoCapture(self.video_path)
-        if not cap.isOpened():
-            print(f"Error opening video file: {self.video_path}")
-            return False
-        
-        self.fps = cap.get(cv2.CAP_PROP_FPS)
-        extra_frames_to_extract = extra_seconds_to_extract * self.fps
 
         if reverse:
-            end = self.start_frame
-            start = max(self.start_frame - extra_frames_to_extract, 0)
+            end = self.start_second
+            start = self.start_second - extra_seconds_to_extract
+            self.start_second = start
         else:
-            start = self.end_frame
-            end = min(self.end_frame + extra_frames_to_extract, int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))
+            start = self.end_second
+            end = self.end_second + extra_seconds_to_extract
+            self.end_second = end
 
-        cap.release()
-        self.extract_frames(int(start), int(end), int(self.fps))
+        print(f"Start {start}, End {end}")
+        self.extract_frames_by_damage_time(int(start), int(end), frame_rate=25)
 
     def __check_for_similarity(self, frame1, frame2):
         """
@@ -245,14 +233,15 @@ class VideoPlayer:
                 self.video.release()
             
             self.video = cv2.VideoCapture(video_path)
-            self.video.set(cv2.CAP_PROP_POS_FRAMES, 200)  # Where frame_no is the frame you want
             self.total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT))
             self.frame_rate = int(self.video.get(cv2.CAP_PROP_FPS))
             self.current_frame = 0
             self.slider.configure(to=self.total_frames-1)
             self.stop_frame_var.set(str(self.total_frames-1))
             self.stop_frame = self.total_frames-1
-            self.update_frame()
+
+            self.slider_changed(self.start_frame)
+            self.slider.set(self.start_frame)
             
     def toggle_play(self):
         if self.video is None:
