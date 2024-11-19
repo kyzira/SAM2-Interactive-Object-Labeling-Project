@@ -4,7 +4,7 @@ import numpy as np
 import gc
 
 class Sam2Class:
-    def __init__(self, frame_dir, sam_paths):
+    def __init__(self, sam_paths):
         # Initialize the predictor as needed
         if not sam_paths:
             sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
@@ -13,7 +13,7 @@ class Sam2Class:
             sam2_checkpoint = sam_paths["sam2_checkpoint"]
             model_cfg = sam_paths["model_cfg"]
 
-        self.frame_dir = frame_dir
+        self.frame_dir = None
         torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
         self.initialized = False
 
@@ -22,9 +22,9 @@ class Sam2Class:
             torch.backends.cudnn.allow_tf32 = True
 
         self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
-        self.init_predictor_state()
 
-    def init_predictor_state(self):
+
+    def init_predictor_state(self, frame_dir=None):
         """
             Initialize SAM2:
                 Load the images from the given directory and set inference state to its starting values.
@@ -33,6 +33,9 @@ class Sam2Class:
                 - When changing the frame_dir, or the images in it.
         """
         try:
+            if frame_dir:
+                self.frame_dir = frame_dir
+                
             print("SAM initialized")
             self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
             self.initialized = True

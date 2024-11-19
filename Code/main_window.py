@@ -119,9 +119,12 @@ class MainWindow:
         # Load Info for all frames
         self.root.after(100, self.add_overlay_to_frames())
 
-    def init_add_observations_menu(self, object_add_buttons:list):
+    def init_add_observations_menu(self, object_add_buttons:list, disable_next_buttons = False, enable_evaluation_buttons = False):
         for observation in object_add_buttons:
             self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.add_observation(observation=n))
+
+        self.disable_next_buttons = disable_next_buttons
+        self.enable_evaluation_buttons = enable_evaluation_buttons
 
         self.create_first_row_widgets()
         self.create_second_row_widgets()
@@ -250,11 +253,18 @@ class MainWindow:
 
 
         # Create the button
-        self.next_button = tk.Button(self.first_frame, text="Next", command=lambda: self.close_window(), height=2, width=10, bg="indianred").pack(side="right", padx=5, pady=5)
-        self.skip_button = tk.Button(self.first_frame, text="Skip", command=lambda: self.close_window(skip=True), height=2, width=10, bg="indianred").pack(side="right", padx=5, pady=5)
+        if not self.disable_next_buttons:
+            self.next_button = tk.Button(self.first_frame, text="Next", command=lambda: self.close_window(), height=2, width=10, bg="indianred")
+            self.next_button.pack(side="right", padx=5, pady=5)
+            self.skip_button = tk.Button(self.first_frame, text="Skip", command=lambda: self.close_window(skip=True), height=2, width=10, bg="indianred")
+            self.skip_button.pack(side="right", padx=5, pady=5)
+
+        if self.enable_evaluation_buttons:
+            self.good_button = tk.Button(self.first_frame, text="Good", command=lambda: self.eval_video_tracking(state=True), height=2, width=10, bg="lightgray").pack(side="right", padx=5, pady=5)
+            self.bad_button = tk.Button(self.first_frame, text="Bad", command=lambda: self.eval_video_tracking(state=False), height=2, width=10, bg="lightgray").pack(side="right", padx=5, pady=5)
+
         self.start_tracking_button = tk.Button(self.first_frame, text="Start Tracking", command=lambda: self.track_object_in_video(), height=2, width=10, bg="palegreen").pack(side="right", padx=5, pady=5)
         self.add_split_button = tk.Button(self.first_frame, text="Add new Split", command=lambda n="Splitting": self.set_left_click_mode(n), height=2, width=10, bg="lightblue").pack(side="right", padx=5, pady=5)
-
 
     def create_second_row_widgets(self):
         for widget in self.second_frame.winfo_children():
@@ -448,6 +458,12 @@ class MainWindow:
             if clicked_intervall != self.last_clicked_intervall:   
                 self.sam_model.reset_predictor_state()
 
+            try:
+                self.next_button.config(state=tk.DISABLED)
+                self.skip_button.config(state=tk.DISABLED)
+            except:
+                pass
+
             self.open_annotation_window(img_index)
 
             self.last_clicked_intervall = clicked_intervall
@@ -466,7 +482,6 @@ class MainWindow:
                 if self.grid_size > 1:
                     self.grid_size -= 1
             self.create_image_grid()
-
 
     def on_mousewheel(self, event):
         # Enable mousewheel scrolling
@@ -495,7 +510,6 @@ class MainWindow:
             self.frames[index].add_to_data(self.selected_observation, observation_data)
             self.draw_overlays_on_image_views()
         
-
         # Clean up any resources or state related to the AnnotationWindow
         self.annotation_window.annotation_window.destroy()
         self.annotation_window = None
@@ -639,7 +653,6 @@ class MainWindow:
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             
 
-
     def prompt_grid_size(self):
         # Prompt the user to input new grid dimensions
         grid_size = simpledialog.askinteger("Grid Size", "Enter Grid Size:", minvalue=1, maxvalue=10)
@@ -693,6 +706,12 @@ class MainWindow:
         # Initialize a dictionary to store all tracked segments
         all_video_segments = dict()
 
+        try:
+            self.next_button.config(state=tk.NORMAL)
+            self.skip_button.config(state=tk.NORMAL)
+        except:
+            pass
+
         if self.selected_observation in self.split_intervals.keys() and len(self.split_intervals[self.selected_observation]) > 0:
             # If the selected observation has intervals
             for start, end in self.split_intervals[self.selected_observation]:
@@ -716,8 +735,6 @@ class MainWindow:
                 self.sam_model.reset_predictor_state()
 
         
-
-
         # Process each frame in all_video_segments
         for out_frame_idx, masks in all_video_segments.items():
             img_view = self.frames[out_frame_idx]
@@ -731,7 +748,6 @@ class MainWindow:
             img_view.add_to_observation(self.selected_observation, "Mask Polygon", polygons)
 
         self.draw_overlays_on_image_views()
-
 
 
     def save_to_json(self):
@@ -748,10 +764,22 @@ class MainWindow:
 
         self.json_read_write.save_json_to_file()
 
+
+    def eval_video_tracking(self, state = True):
+        '''
+        state -> if the video tracking result is good (= True) or bad (= False)
+        '''
+        state_name = "Good" if state else "Bad"
+
+        self.json_read_write.add_to_info(key="Segmentation Evaluation",
+                                         value=state_name)
+
+        self.close_window()
+
+
     def remove_image_view(self):
         for frame in self.frames:
             frame.close_image_view()
-
         self.frames = None
 
     def close_window(self, skip=False):
@@ -759,3 +787,4 @@ class MainWindow:
             self.json_read_write.add_to_info(key="Skipped", value="True")
         
         self.next_callback()
+

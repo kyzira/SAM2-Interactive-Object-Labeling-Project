@@ -6,7 +6,7 @@
   # "test_mode"   Opens the locally saved test_mode folder as its input
   # "folder_mode" folder Mode enables a loop to select a folder with the json and the original frames folder in it and displays them with their labeling
   # "auto_mode"   Use a pretrained yolo model for labeling. NOT IMPLEMENTED YET!
-mode: list_mode
+mode: folder_mode
 
 # Put in here the path to your SAM2 Checkpoint and model config.
 # Use the whole paths. The checkpoint is the file you have to download yourself the model config is in your downloaded sam2 repo.
@@ -31,9 +31,6 @@ settings:
   frame_extraction_puffer_after : 10
   image_similarity_threshold : 0.8  # Threshold how similar frames can be when taking them from the video
   extraction_frame_per_frames : 25  # In what rate a frame shall be extracted
-
-
-
 
 # Every element of this list will become a seperate Button for quickly adding new classes
 object_add_buttons:

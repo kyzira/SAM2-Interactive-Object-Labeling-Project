@@ -9,186 +9,170 @@ import os
 
 
 def load_settings() -> dict:
-    script_dir = os.path.dirname(os.path.abspath(__file__))  # Get the directory of the current script
-    config_path = os.path.join(script_dir, "..", "config.yaml")  # Adjust the path as needed
+    """Load the configuration settings from a YAML file."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(script_dir, "..", "config.yaml")
     with open(config_path, 'r') as config_file:
-        config = yaml.safe_load(config_file)
-    return config
+        return yaml.safe_load(config_file)
+
+def calculate_time_bounds(video_time: str, config: dict) -> tuple:
+    """Calculate start and end times for frame extraction."""
+    h, m, s = map(int, video_time.split(":"))
+    timestamp = h * 3600 + m * 60 + s
+    start_time = timestamp - config["settings"].get("frame_extraction_puffer_before", 60)
+    end_time = timestamp + config["settings"].get("frame_extraction_puffer_after", 10)
+    return start_time, end_time
 
 def extract_frames(frame_extraction: FrameExtraction, table_row: dict, config: dict) -> bool:
-    video_zeitpunkt = table_row["Videozeitpunkt (h:min:sec)"].split(":")
-    sekunde_zeitpunkt = int(video_zeitpunkt[0]) * 60 * 60 + int(video_zeitpunkt[1]) * 60 + int(video_zeitpunkt[2])
-    start_zeitpunkt = sekunde_zeitpunkt - config["settings"].get("frame_extraction_puffer_before", 60)
-    end_zeitpunkt = sekunde_zeitpunkt + config["settings"].get("frame_extraction_puffer_after", 10)
-
-    frame_extraction.start_second = start_zeitpunkt
-    frame_extraction.end_second = end_zeitpunkt
+    """Extract frames using FrameExtraction."""
+    start_time, end_time = calculate_time_bounds(
+        table_row["Videozeitpunkt (h:min:sec)"], config
+    )
+    frame_extraction.start_second = start_time
+    frame_extraction.end_second = end_time
 
     try:
-        frame_extraction.extract_frames_by_damage_time(start_zeitpunkt, end_zeitpunkt, config["settings"].get("extraction_frame_per_frames", 25))
+        frame_extraction.extract_frames_by_damage_time(
+            start_time, end_time, config["settings"].get("extraction_frame_per_frames", 25)
+        )
         return True
     except Exception as e:
-        print(f"An unknown error occurred: {e}")
+        print(f"Error during frame extraction: {e}")
         return False
 
-def test_mode(config):
-    frame_dir = r"C:\Code Python\SAM2-Interactive-Object-Labeling-Project\labeling_project\test folder\source images"
-    sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
-
-    # Define a function to close the window and update the loop control variable
-    def close_window():
-        app.save_to_json()
-        app.root.destroy()
-        print("Grid Window closed and data saved to Json")
-        app.remove_image_view()
-
-    # Define the callback function that will trigger the next loop iteration
-    def run_next_loop():
-        close_window()  # Close the current window 
-
-    root = tk.Tk()
-    app = MainWindow(root, sam_model, run_next_loop)
+def setup_main_window(root, sam_model, config, frame_dir, json_data=None, start_observation=None, next_callback=None, **kwargs):
+    """Set up and initialize the MainWindow."""
+    app = MainWindow(root, sam_model, next_callback, start_observation)
     app.init_frames(frame_dir)
     app.init_settings(settings=config["settings"])
-    app.init_json(config["test_mode_table"])
-    app.init_add_observations_menu(config["object_add_buttons"])
+    app.init_json(json_data)
+    app.init_add_observations_menu(config["object_add_buttons"], **kwargs)
     app.draw_overlays_on_image_views()
-    app.root.protocol("WM_DELETE_WINDOW", close_window)
+    return app
 
-    root.mainloop()  # Start the Tkinter event loop
+def test_mode(config):
+    """Run the application in test mode."""
+    frame_dir = r"C:\Code Python\SAM2-Interactive-Object-Labeling-Project\labeling_project\test folder\source images"
+    sam_model = Sam2Class(config["sam_model_paths"])
+    sam_model.init_predictor_state(frame_dir)
 
-
-
+    root = tk.Tk()
+    app = setup_main_window(
+        root, sam_model, config, frame_dir, config["test_mode_table"], disable_next_buttons=True
+    )
+    app.root.protocol("WM_DELETE_WINDOW", lambda: close_window(app))
+    root.mainloop()
 
 def list_mode(config):
-    # Define a function to close the window and update the loop control variable
-    def close_window():
-        app.save_to_json()
-        app.root.destroy()
-        print("Grid Window closed and data saved to Json")
-        app.remove_image_view()
-
+    """Run the application in list mode."""
     table_and_index = TableAndIndex(config["default_paths"])
+    sam_model = Sam2Class(config["sam_model_paths"])
 
     current_index = table_and_index.get_current_index()
     max_index = table_and_index.get_total_length()
-    next_run = True
 
-    while next_run and current_index < max_index:
-        # Initialize the flag for each iteration of the loop
-        next_run = False
-        app = None
-        # Define the callback function that will trigger the next loop iteration
-        def run_next_loop():
-            nonlocal next_run
-            next_run = True
-            close_window()  # Close the current window to start the next one
-
-
-
-
+    while current_index < max_index:
+        next_run = False  # Reset the loop control variable
         table_row = table_and_index.get_damage_table_row(current_index)
-        print(current_index)
-
-        working_dir = os.path.join(table_and_index.get_output_dir(), "results", table_row["Videoname"])
-        os.makedirs(working_dir, exist_ok=True)
+        working_dir = os.path.join(
+            table_and_index.get_output_dir(), "results", table_row["Videoname"]
+        )
         frame_dir = os.path.join(working_dir, "source images")
         os.makedirs(frame_dir, exist_ok=True)
 
-        frame_extraction = FrameExtraction(video_path=table_row["Videopfad"], output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
-
+        frame_extraction = FrameExtraction(
+            video_path=table_row["Videopfad"],
+            output_dir=frame_dir,
+            similarity_threshold=config["settings"]["image_similarity_threshold"],
+        )
         extract_frames(frame_extraction, table_row, config)
-        
+        sam_model.init_predictor_state(frame_dir)
 
-        sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
-        
         root = tk.Tk()
-        
-        app = MainWindow(root=root, 
-                            sam_model=sam_model, 
-                            start_observation=table_row.get("Label"),
-                            next_callback=run_next_loop)
-        app.init_frames(frame_dir)
-        app.init_settings(settings=config["settings"])
-        app.init_json(table_row)
-        app.init_add_observations_menu(config["object_add_buttons"])
-        app.draw_overlays_on_image_views()
-        app.init_frame_extraction_buttons(frame_extraction, True)
-        app.root.protocol("WM_DELETE_WINDOW", close_window)
 
-        root.mainloop()  # Start the Tkinter event loop
-
-        current_index = table_and_index.increment_and_save_current_index(current_index)
-
-        del sam_model
-        del app
-
-
-
-def folder_mode(config):
-    # Define a function to close the window and update the loop control variable
-    def close_window():
-        app.save_to_json()
-        app.root.destroy()
-        print("Grid Window closed and data saved to Json")
-        app.remove_image_view()
-
-    results_dir = filedialog.askdirectory(title="Select the results Directory",initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-
-    for folder_name in os.listdir(results_dir):
-        result_path = os.path.join(results_dir, folder_name) 
-        frame_dir = os.path.join(result_path,"source images")
-
-        if not os.path.isdir(frame_dir):
-            continue
-
-        sam_model = Sam2Class(frame_dir, config["sam_model_paths"])
-
-
-        # Initialize the flag for each iteration of the loop
-        next_run = False
-
-        # Define the callback function that will trigger the next loop iteration
         def run_next_loop():
             nonlocal next_run
             next_run = True
-            close_window()  # Close the current window to start the next one
+            close_window(app)
 
-
-        root = tk.Tk()
-        app = MainWindow(root=root, 
-                            sam_model=sam_model, 
-                            next_callback=run_next_loop)
-        app.init_frames(frame_dir)
-        app.init_settings(settings=config["settings"])
-        app.init_json()
-        app.init_add_observations_menu(config["object_add_buttons"])
-        app.draw_overlays_on_image_views()
-        app.root.protocol("WM_DELETE_WINDOW", close_window)
-        root.mainloop()  # Start the Tkinter event loop
+        app = setup_main_window(
+            root,
+            sam_model,
+            config,
+            frame_dir,
+            table_row,
+            start_observation=table_row.get("Label"),
+            next_callback=run_next_loop,
+        )
+        app.init_frame_extraction_buttons(frame_extraction, True)
+        app.root.protocol("WM_DELETE_WINDOW", lambda: close_window(app))
+        root.mainloop()
 
         if not next_run:
-            break
+            break  # Exit the loop if the user decides not to continue
+
+        current_index = table_and_index.increment_and_save_current_index(current_index)
+        del app
+        del sam_model.inference_state
+
+def folder_mode(config):
+    """Run the application in folder mode."""
+    results_dir = filedialog.askdirectory(
+        title="Select the results Directory",
+        initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+    )
+    sam_model = Sam2Class(config["sam_model_paths"])
+
+    for folder_name in os.listdir(results_dir):
+        next_run = False  # Reset the loop control variable
+        result_path = os.path.join(results_dir, folder_name)
+        frame_dir = os.path.join(result_path, "source images")
+        if not os.path.isdir(frame_dir):
+            continue
+
+        sam_model.init_predictor_state(frame_dir)
+        root = tk.Tk()
+
+        def run_next_loop():
+            nonlocal next_run
+            next_run = True
+            close_window(app)
+
+        app = setup_main_window(
+            root,
+            sam_model,
+            config,
+            frame_dir,
+            enable_evaluation_buttons=True,
+            next_callback=run_next_loop,
+        )
+        app.root.protocol("WM_DELETE_WINDOW", lambda: close_window(app))
+        root.mainloop()
+
+        if not next_run:
+            break  # Exit the loop if the user decides not to continue
+
+        del app
+        del sam_model.inference_state
 
 
-
-
-
+def close_window(app):
+    """Close the Tkinter window and save the JSON data."""
+    app.save_to_json()
+    app.root.destroy()
+    app.remove_image_view()
+    print("Window closed and data saved to JSON")
 
 def main():
+    """Main entry point for the script."""
     config = load_settings()
-    mode = config["mode"]
-
-    if mode == "test_mode":
-        test_mode(config)
-    elif mode == "list_mode":
-        list_mode(config)
-    elif mode == "folder_mode":
-        folder_mode(config)
-    elif mode == "auto_mode":
-        print
-
-
+    mode_dispatcher = {
+        "test_mode": test_mode,
+        "list_mode": list_mode,
+        "folder_mode": folder_mode,
+    }
+    mode = config.get("mode")
+    mode_dispatcher.get(mode, lambda x: print(f"Invalid mode: {mode}"))(config)
 
 if __name__ == "__main__":
     main()
