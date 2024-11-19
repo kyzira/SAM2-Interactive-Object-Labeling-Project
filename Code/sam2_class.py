@@ -156,7 +156,7 @@ class Sam2Class:
         frames_with_points = []
 
         # Collect frames within the interval and check for points on the selected observation
-        for frame_index in range(start, end):
+        for frame_index in range(start, end+1):
             img_view = frames[frame_index]
 
             new_frame_list.append(img_view)
@@ -198,9 +198,9 @@ class Sam2Class:
                 points += frame_data["Points"]["0"]
                 labels += [0] * len(frame_data["Points"]["0"])
 
-            
+            print(f"Adding Points {points} with labels {labels} for index {index}")
             self.add_point(
-                {"Points": points, "Labels": labels, "Image Index": first_index},
+                {"Points": points, "Labels": labels, "Image Index": index},
                 object_class_id=object_class_id
             )
 
