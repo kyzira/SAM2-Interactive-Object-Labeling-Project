@@ -380,7 +380,7 @@ class MainWindow:
             return
         
         if self.selected_observation == None:
-            print("Select Observation first")
+            simpledialog.messagebox.showinfo("Notification", "Please Select Observation first")
             return
 
         row = event.widget.grid_info()["row"]
@@ -725,7 +725,7 @@ class MainWindow:
         if self.selected_observation in self.split_intervals.keys() and len(self.split_intervals[self.selected_observation]) > 0:
             # If the selected observation has intervals
             for start, end in self.split_intervals[self.selected_observation]:
-                print(f"\nTracking Object {self.selected_observation} form frame {start} to frame {end}!\n")
+                print(f"\nTracking Object {self.selected_observation} form frame {start} to frame {end}!")
                 # Get Index first:
                 start_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == start), None)
                 end_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == end), None)

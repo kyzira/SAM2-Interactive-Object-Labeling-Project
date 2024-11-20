@@ -122,8 +122,6 @@ class JsonReadWrite:
             return  # Add return to avoid further execution when list is empty
         
         for damage in damage_list:
-            print(f"Now deleting {damage}")
-            print(frame_key)
             if str(frame_key) in self.__json_data.keys():
                 frame = self.__json_data[str(frame_key)]
                 if damage in frame["Observations"].keys():

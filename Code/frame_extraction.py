@@ -66,6 +66,10 @@ class FrameExtraction:
         print(f"Extracting frames from {start_frame} to {end_frame}.")
 
         # Extract frames in the specified range
+        counter_pos = 0
+        counter_skipped = 0
+        avg_similarity = 0
+
         for frame_number in range(start_frame, end_frame, frame_rate):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
             ret, frame = cap.read()
@@ -74,18 +78,22 @@ class FrameExtraction:
                 print(f"Failed to read frame {frame_number}.")
                 break
             
-            if last_frame is not None and self.__check_for_similarity(last_frame, frame):
-                print(f"Frame {frame_number} is similar to the last saved frame. Skipping...")
+            if last_frame is not None:
+                similarity_index = self.__check_for_similarity(last_frame, frame)
+            if last_frame is not None and similarity_index > self.similarity_threshold:
+                counter_skipped += 1
+                avg_similarity = similarity_index if avg_similarity == 0 else (avg_similarity + similarity_index) / 2
                 continue
 
             output_filename = os.path.join(self.output_dir, f'{frame_number:05d}.jpg')
             cv2.imwrite(output_filename, frame)
-            print(f"Saved frame {frame_number} to {output_filename}")
-
+            
+            counter_pos += 1
             last_frame = frame
 
         cap.release()
-        print(f"Frames have been saved to {self.output_dir}.")
+
+        print(f"Frames have been saved to {self.output_dir}.\nSuccessfully Extracted {counter_pos} Frames, Skipped {counter_skipped} Frames with Avg Similarity of {int(round(avg_similarity, 2) * 100)}%\n")
         return True
     
     def extract_further(self, extra_seconds_to_extract: int, reverse = False):
@@ -101,7 +109,6 @@ class FrameExtraction:
             end = self.end_second + extra_seconds_to_extract
             self.end_second = end
 
-        print(f"Start {start}, End {end}")
         self.extract_frames_by_damage_time(int(start), int(end), frame_rate=25)
 
     def __check_for_similarity(self, frame1, frame2):
@@ -120,8 +127,7 @@ class FrameExtraction:
         # Compute SSIM between the two frames
         similarity_index = ssim(gray_frame1, gray_frame2)
 
-        print(f"SSIM: {similarity_index}")
-        return similarity_index > self.similarity_threshold
+        return similarity_index
     
 
 class VideoPlayer:

@@ -95,6 +95,7 @@ class Sam2Class:
         return mask
 
     def propagate_in_video(self) -> dict:
+        "Deprecated Function, used to track through whole video"
         if self.initialized == False:
             print("Error: Sam not Initialized!")
 
@@ -129,7 +130,7 @@ class Sam2Class:
         # Reset SAM and add points from the middle frame
         self.reset_predictor_state()
         
-        print(f"Start Frame Num {start} until {end}")
+        print(f"Tracking from Frame {start} to {end}")
         object_class_id = 0
         selected_observation = None
 
@@ -188,7 +189,6 @@ class Sam2Class:
                 points += frame_data["Points"]["0"]
                 labels += [0] * len(frame_data["Points"]["0"])
 
-            print(f"Adding Points {points} with labels {labels} for index {index}")
             self.add_point(
                 {"Points": points, "Labels": labels, "Image Index": index},
                 object_class_id=object_class_id
