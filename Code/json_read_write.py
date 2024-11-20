@@ -13,6 +13,15 @@ class JsonReadWrite:
     def get_json(self):
         return self.__json_data.copy()
     
+    def get_marked_frames_from_info(self):
+        return self.__json_data["Info"].get("Marked Frames", [])
+    
+    def get_intervalls_from_info(self, observation=None):
+        if observation == None:
+            return self.__json_data["Info"].get("Intervalls")
+        else:
+            return self.__json_data["Info"]["Intervalls"].get(observation)
+        
     def reset_json(self):
         self.__json_data = dict()
          
@@ -25,8 +34,7 @@ class JsonReadWrite:
                 return 
             except json.JSONDecodeError:
                 print("Error: JSON is corrupt or broken.\nBacking it up and creating a new JSON!")
-                self.__backup_and_reset_json()
-                
+                self.__backup_and_reset_json()    
         
         # If the JSON file does not exist, create it with default info_table
         self.__json_data = dict()
@@ -35,7 +43,7 @@ class JsonReadWrite:
             self.__create_info()
         return
     
-    def set_json(self, json):
+    def set_json(self, json={}):
         self.__json_data = json
         self.save_json_to_file()
     
@@ -47,15 +55,15 @@ class JsonReadWrite:
             print(f"File could not be saved! Error: {e}")
 
     def add_to_info(self, key, value):
+        if key is None or value is None:
+            print(f"Error: Key: {key} or Value {value} is None!")
+            return
+
         if "Info" not in self.__json_data:
             self.__json_data["Info"] = {}
 
         self.__json_data["Info"][key] = value
         self.save_json_to_file()
-
-
-    def get_marked_frames_from_info(self):
-        return self.__json_data["Info"].get("Marked Frames", [])
 
         
     def add_intervalls_to_info(self, observation: str, intervall_list: list[(int,int)]):
@@ -63,13 +71,6 @@ class JsonReadWrite:
         intervalls[observation] = intervall_list
         self.__json_data["Info"]["Intervalls"] = intervalls
         self.save_json_to_file()
-
-    def get_intervalls_from_info(self, observation=None):
-        if observation == None:
-            return self.__json_data["Info"].get("Intervalls")
-        else:
-            return self.__json_data["Info"]["Intervalls"].get(observation)
-
         
     def add_to_frame(self, frame_name: str, observation: str, observation_data: dict):
         """
@@ -154,8 +155,6 @@ class JsonReadWrite:
 
     def __create_info(self):
         damage_table = self.table_row
-
-
         observation_name_and_time = f"{damage_table['Label']}, at {damage_table['Videozeitpunkt (h:min:sec)']}"
         # Create a list of relevant keys from config.yaml
 

@@ -14,10 +14,7 @@ class ImageView:
         self.__drawn_image = self.__image.copy()
         self.img_size = self.__image.size
 
-        self.__borders = {
-            "Marked": False
-        }
-
+        self.__borders = {"Marked": False}
         self.__data = {}
 
     def get_image(self):
@@ -185,7 +182,6 @@ class ImageView:
         base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
         self.__drawn_image = base_img
 
-
     def draw_polygon(self, polygons, color="red"):
         color = self.__get_color(color)
         base_img = self.__drawn_image
@@ -210,7 +206,6 @@ class ImageView:
         base_img = Image.alpha_composite(base_img.convert("RGBA"), overlay)
         self.__drawn_image = base_img
 
-
     def draw_and_convert_masks(self, mask, color="red") -> list:
         polygons = []
         self.reset_drawn_image()
@@ -227,11 +222,9 @@ class ImageView:
 
             # Convert contour points to a list of tuples
             simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
-            
             polygons.append(simplified_contour)
 
         self.draw_polygon(polygons, color)
-
         return polygons
     
     def pop_observation(self, observation):

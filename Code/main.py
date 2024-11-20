@@ -116,7 +116,7 @@ def list_mode(config):
         del sam_model.inference_state
 
 def folder_mode(config):
-    """Run the application in folder mode."""
+    """Run the application in folder mode. This enables the Evaluation Buttons"""
     results_dir = filedialog.askdirectory(
         title="Select the results Directory",
         initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),

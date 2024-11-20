@@ -60,14 +60,15 @@ class MainWindow:
         self.split_start = None
         self.split_end = None
 
-        self.is_init_completed = False
-
         self.annotation_window_geometry_data = {
             "Maximized" : False,
             "Geometry" : None
         }
 
     def init_frames(self, frame_dir:str):
+        """
+        Reads the Folder for frames and creates a list of the frames as image_view instances
+        """
         self.frames = []
         self.frame_dir = frame_dir
         if not frame_dir:
@@ -82,6 +83,9 @@ class MainWindow:
         self.root.after(100, self.create_image_grid)
 
     def init_settings(self, settings:dict):
+        """
+        Reads the settings dict and sets Window and Grid Size
+        """
         window_width = settings.get("window_width", 800)
         window_height = settings.get("window_height", 600)
 
@@ -98,11 +102,14 @@ class MainWindow:
             self.grid_size = grid_size
         self.max_grid_size = int(sqrt(len(self.frames))) + 1
 
-    def init_json(self, table_row={}):
+    def init_json(self, info_dict={}):
+        """
+        Takes the information given from info_dict and saves it into the Info Key in the Json
+        """
         json_dir = os.path.dirname(self.frame_dir)
         json_path = os.path.join(json_dir, f"{os.path.basename(json_dir)}.json")
 
-        self.json_read_write = JsonReadWrite(json_path, table_row)
+        self.json_read_write = JsonReadWrite(json_path, info_dict)
 
         json_data = self.json_read_write.get_json()
 
@@ -120,6 +127,11 @@ class MainWindow:
         self.root.after(100, self.add_overlay_to_frames())
 
     def init_add_observations_menu(self, object_add_buttons:list, disable_next_buttons = False, enable_evaluation_buttons = False):
+        """
+        Takes the object_add_buttons list and adds the entries to the "Add" Drop down menu.
+        disable_next_buttons: When True doesnt create the Next and Skip Buttons on the window.
+        enable_evaluation_buttons: When True creates a Good and a Bad Button on the window for evaluation.
+        """
         for observation in object_add_buttons:
             self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.add_observation(observation=n))
 
@@ -130,15 +142,14 @@ class MainWindow:
         self.create_second_row_widgets()
 
     def init_frame_extraction_buttons(self, frame_extraction: FrameExtraction, extract_seconds_buttons_enable: bool):
+        """
+        When the start and end of the cut out video frames are known and saved in frame_extraction, this creates buttons to quickly cut out 10 more seconds of frames in either direction
+        """
         self.frame_extraction = frame_extraction
 
         if extract_seconds_buttons_enable:
             self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10, False), height=2, width=10).pack(side="right", padx=5, pady=5)
             self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(10, True), height=2, width=10).pack(side="right", padx=5, pady=5)
-
-    def init_complete(self):
-        self.is_init_completed = True
-
 
     def create_widgets(self):
         # Configure grid layout for the root window
@@ -327,6 +338,7 @@ class MainWindow:
 
 
     def add_overlay_to_frames(self):
+        """This function takes the data from the json and saves them in every frame image_view instance"""
         json_data = self.json_read_write.get_json()
 
         for image_view in self.frames:
@@ -352,6 +364,17 @@ class MainWindow:
 
 
     def on_image_left_click(self, event):
+        """
+        Depending on what Mode is Currently Active this either:
+        - Marking Up:   Marks Frames with a red Border and lists them in the Info part of the Json
+        - Splitting:    Creates Splits with the first clicked image being the start and the second the end for that split
+        - Delete Split: Deletes Splits when a frame within a Split is clicked
+        - Deleting:     Deletes Masks and Points for the clicked Image
+
+        If no Mode is active, it checks if there are Splits in the Image, if yes and the clicked frame is in one, it opens the Annotation Window.
+        If no Split exists, it creates one spanning from start to end and opens the Annotation Window.
+        If yes and the clicked frame is not in a split, it does nothing.
+        """
         # Calculate the row and column from the event
         if not (self.root and self.root.winfo_exists()):  # Ensure root still exists
             return
@@ -487,10 +510,6 @@ class MainWindow:
         # Enable mousewheel scrolling
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-    def on_slider_change(self, value):
-        # self.draw_images_on_grid(value)
-        print
-
     def on_annotation_window_close(self):
         # save settings
         points, polygons = self.annotation_window.get_points_and_labels()
@@ -550,7 +569,6 @@ class MainWindow:
         self.reinit_sam()
         self.draw_overlays_on_image_views()
 
-
     def open_extraction_window(self):
         start_frame, end_frame = self.frame_extraction.extract_from_video_player()
         if start_frame or end_frame:
@@ -570,7 +588,6 @@ class MainWindow:
             self.reinit_sam()
             self.draw_overlays_on_image_views()
                     
-       
     def open_annotation_window(self, index):
         img_view = self.frames[index]
 
@@ -594,6 +611,7 @@ class MainWindow:
         self.annotation_window.annotation_window.mainloop()
 
     def set_left_click_mode(self, mode):
+        """Sets the internal dict for tracking based on the currently active mode"""
         self.first_frame.config(background=self.left_click_mode_colors.get(mode, "goldenrod"))
         self.second_frame.config(background=self.left_click_mode_colors.get(mode, "goldenrod"))
         for key in self.left_click_modes.keys():
@@ -603,6 +621,7 @@ class MainWindow:
                 self.left_click_modes[key] = False
 
     def reset_left_click_modes(self, event=None):
+        """Resets the internal dict for the currently active mode"""
         for keys in self.left_click_modes.keys():
             self.left_click_modes[keys] = False
 
@@ -612,6 +631,9 @@ class MainWindow:
         self.second_frame.config(background="lightgrey")
     
     def draw_overlays_on_image_views(self):
+        """
+        for every image: Draws their masks and Borders on the shown image.
+        """
         try:
             intervals = self.split_intervals.get(self.selected_observation, [])
             for image_view in self.frames:
@@ -620,8 +642,10 @@ class MainWindow:
             self.root.after(200, self.create_image_grid)
         except: pass
 
-
     def create_image_grid(self):
+        """
+        Puts the Images on the Grid.
+        """
         self.image_references = []
 
         orig_width, orig_height = self.frames[0].get_image_size()
@@ -652,7 +676,6 @@ class MainWindow:
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             
-
     def prompt_grid_size(self):
         # Prompt the user to input new grid dimensions
         grid_size = simpledialog.askinteger("Grid Size", "Enter Grid Size:", minvalue=1, maxvalue=10)
@@ -660,21 +683,8 @@ class MainWindow:
             self.grid_size = grid_size
             self.create_image_grid()
 
-    def set_scale_value(self, value=None, add_value=None):
-        max_value = self.slider.cget("to")
-        
-        if add_value and not value:
-            value = self.slider.get() + add_value
-            value = min(value, max_value)
-            value = max(value, 0)
-        if value >= 0:
-            self.slider.set(value)
-
-        self.on_slider_change(value)
-
     def resize_images(self, event=None):
         self.create_image_grid()
-
 
     def reinit_sam(self):
         self.sam_model.init_predictor_state()
@@ -700,9 +710,9 @@ class MainWindow:
 
         self.frames = new_frames
 
-
-
     def track_object_in_video(self):
+        """Tracks Objects based on their given Points in their intervalls"""
+
         # Initialize a dictionary to store all tracked segments
         all_video_segments = dict()
 
@@ -751,6 +761,7 @@ class MainWindow:
 
 
     def save_to_json(self):
+        """Saves the mask and point date saved in every frame to the json"""
         for img_view in self.frames:
             data = img_view.get_data()
             for observation, observation_data in data.items():
@@ -766,9 +777,8 @@ class MainWindow:
 
 
     def eval_video_tracking(self, state = True):
-        '''
-        state -> if the video tracking result is good (= True) or bad (= False)
-        '''
+        """state -> if the video tracking result is good (= True) or bad (= False)"""
+
         state_name = "Good" if state else "Bad"
 
         self.json_read_write.add_to_info(key="Segmentation Evaluation",
@@ -783,8 +793,8 @@ class MainWindow:
         self.frames = None
 
     def close_window(self, skip=False):
+        """When Next or Skip is clicked, the next_callback function is called to ensure the next video is loaded"""
         if skip:
             self.json_read_write.add_to_info(key="Skipped", value="True")
         
         self.next_callback()
-

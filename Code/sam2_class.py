@@ -56,21 +56,7 @@ class Sam2Class:
             The points describe SAM where the Object is, and where it isnt. 
             Depending on these added points the tracking is done.
 
-            Needed parameters:
-                - points_labels_and_sequence_index:
-                    This is a dictionairy containing 3 items:
-                    - "Punkte": 
-                        This is a list containing tuples with the Coordinates of the points.
-                        They are in the following format: (x, y), x and y in pixels from the top left of the image.
-                    - "Labels": 
-                        This is a list containing "0" and "1" depending if the corresponding point in "Punkte" is a
-                        "positive" or "negative" point for the selected object class
-                    - "Image Index":
-                        This is an integer, only to track to which image the other 2 lists belong to
-
-                - object_class_id:
-                    This is an integer, only to differentiate objects, when tracking multiple objects at the same time.
-                    The Value is an arbitrary number.
+            points_labels_and_frame_index -> a dict with the keys:  Points = [[x1, y1], ...], Labels = [int, int, ...], Image Index = int
         """
 
         if not points_labels_and_frame_index:
@@ -81,11 +67,13 @@ class Sam2Class:
             print("Error: Sam not initialized correctly")
             return
         
-        points = points_labels_and_frame_index["Points"]
-        labels = points_labels_and_frame_index["Labels"]
-        frame_index = points_labels_and_frame_index["Image Index"]
-        
-        
+        points = points_labels_and_frame_index.get("Points")
+        labels = points_labels_and_frame_index.get("Labels")
+        frame_index = points_labels_and_frame_index.get("Image Index")
+
+        if points is None or labels is None or frame_index is None:
+            print(f"Error: Points {points}, labels {labels} or frame index {frame_index} is None!")
+            return
 
         points_np = np.array(points, dtype=np.float32)
         labels_np = np.array(labels, dtype=np.float32)
@@ -133,7 +121,6 @@ class Sam2Class:
 
         return video_segments
     
-
     def propagate_through_interval(self, frames, button_states, start: int, end: int) -> dict:
         if not self.initialized:
             print("Error: SAM not Initialized!")

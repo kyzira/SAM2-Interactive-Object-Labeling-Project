@@ -47,7 +47,6 @@ class FrameExtraction:
 
         self.extract_frames(int(start_frame), int(end_frame), int(frame_rate))
 
-
     def extract_frames(self, start_frame: int, end_frame: int, frame_rate: int) -> bool:
 
         last_frame = None
@@ -124,7 +123,6 @@ class FrameExtraction:
         print(f"SSIM: {similarity_index}")
         return similarity_index > self.similarity_threshold
     
-
 
 class VideoPlayer:
     def __init__(self, root, video_path=None, start_frame = 0):
@@ -308,10 +306,3 @@ class VideoPlayer:
     
     def get_result(self):
         return self.start_frame, self.stop_frame
-
-
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = VideoPlayer(root)
-    root.mainloop()

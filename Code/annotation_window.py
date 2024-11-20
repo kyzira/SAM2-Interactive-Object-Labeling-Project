@@ -50,7 +50,6 @@ class AnnotationWindow:
         self.resized_width = None
         self.resized_height = None
 
-
     def init_window(self, window_geometry:dict):
         annotation_window = tk.Toplevel()
         annotation_window.title(f"Punkte hinzufügen")
@@ -85,8 +84,6 @@ class AnnotationWindow:
         self.object_class_id = object_class_id
         self.sam_model = sam_model
 
-
-
     def get_points_and_labels(self):
         return self.points, self.polygons
     
@@ -96,8 +93,6 @@ class AnnotationWindow:
     
     def get_index(self):
         return self.frame_index
-
-
 
     def __on_resize(self, event):
         # Update canvas size to match window size
@@ -112,7 +107,6 @@ class AnnotationWindow:
         if self.annotation_window.state() == "zoomed":
             self.window_maximized = True
         self.geometry_data = self.annotation_window.geometry()
-
 
     def __on_click(self, event):
         # Get the coordinates of the click
@@ -150,7 +144,6 @@ class AnnotationWindow:
                 self.__create_propagated_image()
             
             self.__draw_image_on_canvas()
-
 
     def __draw_image_on_canvas(self):
         image_to_display = self.img_view.get_drawn_image()
