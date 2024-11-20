@@ -9,6 +9,10 @@ import time
 
 
 class FrameExtraction:
+    """
+    This class loads the video and extracts frames in ranges set in the config file, or from a given to a given frame.
+    When extract from video player function is loaded, it opens the VideoPlayer class and enables getting frames through the video player
+    """
     def __init__(self, video_path, output_dir, similarity_threshold=0.8):
         self.video_path = video_path
         self.output_dir = output_dir
@@ -131,7 +135,10 @@ class FrameExtraction:
     
 
 class VideoPlayer:
-    def __init__(self, root, video_path=None, start_frame = 0):
+    """
+    This class opens a video player, which lets you set a start and end for frame extraction
+    """
+    def __init__(self, root, video_path=None, start_second = 0):
         self.root = root
         self.root.title("Video Player")
         
@@ -139,12 +146,13 @@ class VideoPlayer:
         self.video_path = video_path
         self.video = None
         self.total_frames = 0
-        self.current_frame = start_frame
-        self.start_frame = start_frame
+        self.current_frame = 0
+        self.start_frame = 0
         self.stop_frame = 0
         self.is_playing = False
         self.frame_rate = 30
-        
+        self.start_second = start_second
+
         self.setup_ui()
         
         if video_path:
@@ -238,11 +246,15 @@ class VideoPlayer:
             
             self.video = cv2.VideoCapture(video_path)
             self.total_frames = int(self.video.get(cv2.CAP_PROP_FRAME_COUNT))
+
             self.frame_rate = int(self.video.get(cv2.CAP_PROP_FPS))
             self.current_frame = 0
             self.slider.configure(to=self.total_frames-1)
             self.stop_frame_var.set(str(self.total_frames-1))
             self.stop_frame = self.total_frames-1
+
+            self.start_frame = self.start_second * self.frame_rate
+            self.first_frame_label.config(text=f"First Frame was {self.start_frame}")
 
             self.slider_changed(self.start_frame)
             self.slider.set(self.start_frame)
@@ -311,4 +323,7 @@ class VideoPlayer:
             print("Please enter valid frame numbers")
     
     def get_result(self):
-        return self.start_frame, self.stop_frame
+        start = (int(self.start_frame/self.frame_rate)*self.frame_rate)
+        end = (int(self.stop_frame/self.frame_rate)*self.frame_rate)
+
+        return start, end

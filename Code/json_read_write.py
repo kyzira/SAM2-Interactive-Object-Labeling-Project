@@ -4,6 +4,9 @@ from datetime import datetime
 
 
 class JsonReadWrite:
+    """
+    This class handles interaction with the dict in which all data is stored and its json file, in which it will be stored.
+    """
     def __init__(self, json_path, table_row={}):
         self.__json_data = dict()
         self.json_path = json_path

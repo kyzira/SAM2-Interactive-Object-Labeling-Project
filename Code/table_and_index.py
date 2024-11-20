@@ -2,6 +2,9 @@ import os
 import pandas as pd
 
 class TableAndIndex:
+    """
+    This Class handles interacting with the csv, in which all information about the videos is stored in and handles incrementing the index every loop
+    """
     def __init__(self, paths):
         self.__output_path = paths["output_path"]
         self.__table_path = paths["table_path"]

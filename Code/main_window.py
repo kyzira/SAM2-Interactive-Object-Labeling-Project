@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import simpledialog, ttk
 from PIL import Image, ImageTk
 import os
+import time
 from image_view import ImageView
 from annotation_window import AnnotationWindow
 from math import sqrt
@@ -10,6 +11,9 @@ from frame_extraction import FrameExtraction
 
 
 class MainWindow:
+    """
+    This Window shows an Grid of Images.
+    """
     def __init__(self, root, sam_model, next_callback, start_observation = None):
         super().__init__()
         self.root = root
@@ -35,8 +39,9 @@ class MainWindow:
         self.annotation_window = None
 
         self.observations = []
-        if start_observation:
-            self.observations.append(start_observation)
+        self.start_observation = start_observation
+        self.disable_next_buttons = False
+        self.enable_evaluation_buttons = False
 
         self.button_states = {}
         self.selected_observation = None
@@ -116,12 +121,14 @@ class MainWindow:
         self.marked_frames = json_data["Info"].get("Marked Frames", [])
         self.split_intervals = json_data["Info"].get("Instance Intervals", {})
 
+        if self.start_observation:
+            self.add_observation(self.start_observation)
+
         for value in json_data.values():
             if "Observations" in value:
                 for observation in value["Observations"].keys():
-                    if observation in self.observations:
-                        continue
-                    self.observations.append(observation)
+                    if observation not in self.observations:
+                        self.observations.append(observation)
 
         # Load Info for all frames
         self.root.after(100, self.add_overlay_to_frames())
@@ -262,7 +269,6 @@ class MainWindow:
             self.button_states[first_observation]["Button"].config(relief="sunken")
             self.selected_observation = first_observation
 
-
         # Create the button
         if not self.disable_next_buttons:
             self.next_button = tk.Button(self.first_frame, text="Next", command=lambda: self.close_window(), height=2, width=10, bg="indianred")
@@ -349,7 +355,6 @@ class MainWindow:
                 continue
             
             image_view.set_data(frame_data["Observations"])
-            
             if frame_num in self.marked_frames:
                 image_view.set_border(self.selected_observation, "Marked", True)
 
@@ -478,8 +483,12 @@ class MainWindow:
                 if start <= self.frames[img_index].get_frame_num() <= end:
                     clicked_intervall = (start, end)
             
-            if clicked_intervall != self.last_clicked_intervall:   
-                self.sam_model.reset_predictor_state()
+            try:
+                if clicked_intervall != self.last_clicked_intervall:   
+                    self.sam_model.reset_predictor_state()
+            except:
+                print("Clicked Image is in no Intervall!")
+                return
 
             try:
                 self.next_button.config(state=tk.DISABLED)

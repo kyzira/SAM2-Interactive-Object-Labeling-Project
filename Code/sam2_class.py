@@ -4,6 +4,10 @@ import numpy as np
 import gc
 
 class Sam2Class:
+    """
+    This Class manages the interaction with SAM2.
+    Here the given parameters will be formattet correctly and when propagating through the video, will set up SAM according to the intervall it currently tracks.
+    """
     def __init__(self, sam_paths):
         # Initialize the predictor as needed
         if not sam_paths:
