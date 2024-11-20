@@ -12,14 +12,14 @@ mode: list_mode
 # Use the whole paths. The checkpoint is the file you have to download yourself the model config is in your downloaded sam2 repo.
 # !You have to match the Model sizes.
 sam_model_paths:
-  sam2_checkpoint : C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt
-  model_cfg : C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
+  sam2_checkpoint : C:\Code\sam2\checkpoints\sam2.1_hiera_large.pt
+  model_cfg : C:\Code\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
 
 
 # These are the list mode paths
 default_paths:
-  output_path : C:\Users\K3000\Desktop\Label Data
-  table_path : C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
+  output_path : C:\Users\Yannick\Desktop\Label_data
+  table_path : C:\Code\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
 
 settings:
   default_grid_size : 0   # If set to 0: default to loading maximum if set to any other number set grid to that size
