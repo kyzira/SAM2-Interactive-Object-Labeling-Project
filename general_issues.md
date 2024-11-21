@@ -1,0 +1,33 @@
+General issues:
+
+- show video name and reference point (i.e. video time) for better orientation (maybe in title of main window), so you know what kind of data is shown/edited
+- remove .pyc files from repo
+- each class should have a documentation at the top of its file
+- rename file "sam2_class"  and class "Sam2Class", because a variable name should not contain its type (provides no added value)
+  => maybe name it "Sam" or "Segmenter"
+
+General suggestions:
+- Build Sam2Predictor outside Sam class and set it in sam class from outside
+  => in the `main.py::list_mode` you can create a new sam class each loop run and pass the predictor each time
+  => then the sam class should automatically get deleted and you do not have to explicitely call "del" on it at the end of the loop run
+- It would make more sense to store current_index.txt at the same location as the csv file of the table path, because it only makes sense in combination with this file
+- Take care of making functions private if they should only be used internally
+- Getter functions do not need to contain "get" (does not bring any benefit), so better rename them, i.e. get_damage_table_row() => damage_table_row()
+- You sometimes call the index of a frame "frame_index" (in annotation_window.py) and sometimes "frame" (in frame_extration.py). Better always call it "frame_index", i.e. "start_frame_index"
+- Function should be enclosed with """ instead of # (i.e. in annotation_window::__create_propagated_image)
+- You should always set a type hint for the return value of a function, so the viewer can directly understand the inputs and outputs of a function, i.e.:  
+  ``` python
+  def get_image_size(self) -> tuple[int, int]:
+  ```
+- I personally prefer calling functions from imported modules as the following, so you directly understand where the called function origins from:
+  ``` python
+  import skimage
+  similarity_index = skimage.metrics.structural_similarity(gray_frame1, gray_frame2)
+  ```
+  instead of
+  ``` python
+  from skimage.metrics import structural_similarity as ssim
+  similarity_index = ssim(gray_frame1, gray_frame2)
+  ```
+  But I leave that to you, since most code examples do it like you did.
+- What does the 'avg_similarity' in `FrameExtraction::extract_frames` mean?

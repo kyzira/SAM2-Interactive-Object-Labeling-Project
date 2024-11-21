@@ -3,13 +3,14 @@ import os
 import cv2
 import numpy as np
 
+# I think "ImageInfo" would be a better class name, because the term "view" only implies something like pixels and no meta data.
 class ImageView:
     """
     This class stores info for a frame.
     It stores the original frame, all data about points, masks, borders and the frame with all overlays added to it.
-    This can add and convert the overlays to the correct formats to store them in a way suited for saving them as a json
+    This can add and convert the overlays to the correct formats to store them in a way suited for saving them as a json.
     """
-    def __init__(self, image_path : str) -> None:
+    def __init__(self, image_path: str) -> None:
         self.__image_path = image_path
         temp_image = Image.open(self.__image_path)
 

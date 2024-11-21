@@ -10,6 +10,7 @@ import os
 
 def load_settings() -> dict:
     """Load the configuration settings from a YAML file."""
+    # Should be "script_path", a directory is something else
     script_dir = os.path.dirname(os.path.abspath(__file__))
     config_path = os.path.join(script_dir, "..", "config.yaml")
     with open(config_path, 'r') as config_file:
@@ -57,9 +58,8 @@ def test_mode(config):
     sam_model.init_predictor_state(frame_dir)
 
     root = tk.Tk()
-    app = setup_main_window(
-        root, sam_model, config, frame_dir, config["test_mode_table"], disable_next_buttons=True
-    )
+    # Better write everything in one line, that makes it easier to overview the code block
+    app = setup_main_window(root, sam_model, config, frame_dir, config["test_mode_table"], disable_next_buttons=True)
     app.root.protocol("WM_DELETE_WINDOW", lambda: close_window(app))
     root.mainloop()
 
@@ -74,9 +74,10 @@ def list_mode(config):
     while current_index < max_index:
         next_run = False  # Reset the loop control variable
         table_row = table_and_index.get_damage_table_row(current_index)
-        working_dir = os.path.join(
-            table_and_index.get_output_dir(), "results", table_row["Videoname"]
-        )
+        # Since you dynamically create directories you should check whether "table_and_index.get_output_dir()" and "table_row["Videoname"]" contains
+        # a valid value (i.e. not empty, does not contain prohibited chars for direction creation). If one of them is invalid, print an error and run next loop.
+        # In general: always check whether a path is valid, so you can handle it directly and tell the user about it.
+        working_dir = os.path.join(table_and_index.get_output_dir(), "results", table_row["Videoname"])
         frame_dir = os.path.join(working_dir, "source images")
         os.makedirs(frame_dir, exist_ok=True)
 
@@ -113,14 +114,18 @@ def list_mode(config):
 
         current_index = table_and_index.increment_and_save_current_index(current_index)
         del app
+        # Inference state should be only relevant to sam2_class and not be used outside of it,
+        # you can provide a public function (i.e. "clear_cache" or something) that internally deletes the inference_state variable
         del sam_model.inference_state
 
 def folder_mode(config):
     """Run the application in folder mode. This enables the Evaluation Buttons"""
+    # Better "selected_path" instead of "results_dir"
     results_dir = filedialog.askdirectory(
         title="Select the results Directory",
         initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
     )
+    # Check if results_dir is empty, else the program crashes when user presses "Abort" button
     sam_model = Sam2Class(config["sam_model_paths"])
 
     for folder_name in os.listdir(results_dir):
@@ -152,6 +157,7 @@ def folder_mode(config):
         if not next_run:
             break  # Exit the loop if the user decides not to continue
 
+        # Is it necessary to delete app, since the app lifetime should automatically end when leaving the current loop scope
         del app
         del sam_model.inference_state
 

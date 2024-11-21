@@ -33,6 +33,7 @@ settings:
   extraction_frame_per_frames : 25  # In what rate a frame shall be extracted
 
 # Every element of this list will become a seperate Button for quickly adding new classes
+# "predefined_object_classes" would be clearer instead of "object_add_buttons":
 object_add_buttons:
   - BAB
   - BBA

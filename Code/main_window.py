@@ -24,6 +24,7 @@ class MainWindow:
         self.grid_size = 3  # Default grid size
         self.max_grid_size = None
 
+        # better call it "image_infos" like the classes it contains
         self.frames = []
         self.frame_dir = None
 
@@ -70,7 +71,7 @@ class MainWindow:
             "Geometry" : None
         }
 
-    def init_frames(self, frame_dir:str):
+    def init_frames(self, frame_dir: str):
         """
         Reads the Folder for frames and creates a list of the frames as image_view instances
         """
@@ -87,7 +88,7 @@ class MainWindow:
         
         self.root.after(100, self.create_image_grid)
 
-    def init_settings(self, settings:dict):
+    def init_settings(self, settings: dict):
         """
         Reads the settings dict and sets Window and Grid Size
         """
@@ -612,11 +613,19 @@ class MainWindow:
 
         # Create a new AnnotationWindow instance
         self.annotation_window = AnnotationWindow(img_view, color=self.button_states[self.selected_observation].get("Color"))
+        # Since the annotation window needs geometry data, sam and a close callback (see comment a few lines below), you should implement setter functions
+        # "set_geometry_data", "set_object_class_id", "set_frame_number", "set_sam" and "set_on_closed_callback".
+        # Function "init_window" should be renamed to "open" and additionally it should call "self.annotation_window.mainloop()" at the end.
         self.annotation_window.init_window(self.annotation_window_geometry_data)
         self.annotation_window.init_sam(index, self.observations.index(self.selected_observation), self.sam_model)
 
         # Bind the window close event to a custom method
+        # You should only access public functions from outside a class. So better implement a function in AnnotationWindow, i.e.:
+        # from typing import Callable
+        # def set_on_closed_callback(func: Callable):
+        #    self.annotation_window.protocol("WM_DELETE_WINDOW", func)
         self.annotation_window.annotation_window.protocol("WM_DELETE_WINDOW", self.on_annotation_window_close)
+        # Instead of accessing the member you can implement an "open" function that internally calls the init_window function and then the mainloop
         self.annotation_window.annotation_window.mainloop()
 
     def set_left_click_mode(self, mode):

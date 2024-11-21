@@ -8,7 +8,11 @@ class Sam2Class:
     This Class manages the interaction with SAM2.
     Here the given parameters will be formattet correctly and when propagating through the video, will set up SAM according to the intervall it currently tracks.
     """
+    # Better pass 2 separate paths instead of "sam_paths" to avoid them being switched: "checkpoint_filepath" and "model_filepath".
+    # To differ between paths containing a directory or a file location, use "path" or "filepath"
     def __init__(self, sam_paths):
+        # Check whether the files at the passed file paths exist
+
         # Initialize the predictor as needed
         if not sam_paths:
             sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
@@ -27,7 +31,8 @@ class Sam2Class:
 
         self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
-
+    # Maybe you should just call the function "set_images" or "load", because the user must not know about what exactly happens with them inside this class
+    # This makes it simpler from outside.
     def init_predictor_state(self, frame_dir=None):
         """
             Initialize SAM2:

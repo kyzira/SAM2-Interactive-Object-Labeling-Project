@@ -4,17 +4,17 @@ from image_view import ImageView
 
 class AnnotationWindow:
     """
-        This Class handles displaying and interacting with the Annotation Window.
-        In this Window the given Image will be shown, and if masks are provided from SAM, these will be drawn on top of the image.
-        When clicked on the image the Coordinates of the click and wether it was a right or left click are stored, and forwarded to sam. Sam will then provide a mask, which is drawn on top of the image.
+        This class handles displaying and interacting with the Annotation Window.
+        In this window the given image will be shown, and if masks are provided from SAM, these will be drawn on top of the image.
+        When clicked on the image the coordinates of the click and wether it was a right or left click are stored and forwarded to SAM. SAM will then provide a mask, which is drawn on top of the image.
         
         Workflow:
             - Left Click
-                Adds a positive Point to the clicked coordinates. A positive Point dictates to SAM that the Object you want to track is in the clicked position
+                Adds a positive point to the clicked coordinates. A positive point dictates to SAM that the object you want to track is in the clicked position
             - Right Click
-                Adds a negative Point to the clicked coordinates. A negative Point dictates to SAM that the Object you want to track is definetly not in the clicked position
+                Adds a negative point to the clicked coordinates. A negative point dictates to SAM that the object you want to track is definetly not in the clicked position
             - Backspace Key
-                Removes last added Point
+                Removes last added point
             - Close Window
                 Finishes the annotation process.
             - get_points_and_labels:
@@ -44,8 +44,8 @@ class AnnotationWindow:
         self.object_class_id = None
         self.frame_index = None
 
-        self.image_id = None        # To Store the image for it not to be garbage collected
-        self.tk_image = None        # To Store the image for it not to be garbage collected
+        self.image_id = None        # To store the image for it not to be garbage collected
+        self.tk_image = None        # To store the image for it not to be garbage collected
         
         self.resized_width = None
         self.resized_height = None
@@ -76,6 +76,7 @@ class AnnotationWindow:
         # Add a protocol to handle window close
         annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
 
+        # Better directly use self.annotation_window above instead of storing everything in a copy and setting it afterwards
         self.annotation_window = annotation_window
         self.__draw_image_on_canvas()
 
@@ -121,6 +122,9 @@ class AnnotationWindow:
         image_x = int(image_width * (x / canvas_width))
         image_y = int(image_height * (y / canvas_height))
 
+        # Use constant variables instead of comment for the two click events that are initialized in __init__ function:
+        # self.LEFT_CLICK = 1
+        # self.RIGHT_CLICK = 3
         if event.num == 1: # left click
             self.points["1"].append([image_x, image_y])
             self.order_of_addition.append(1)
@@ -131,7 +135,14 @@ class AnnotationWindow:
         self.__create_propagated_image()
 
     def __on_key_press(self, event):
-        # Remove last added Point
+        # Remove last added point
+        # Since identations make the code structure more unclear, you should always try to avoid larger code blocks with indents:
+        # if event.keysym != "BackSpace":
+        #    return
+        # if len(self.order_of_addition) == 0:
+        #    return
+        # label = self.order_of_addition.pop()
+        # ...
         if event.keysym == "BackSpace":
             if len(self.order_of_addition) == 0:
                 return
@@ -154,6 +165,10 @@ class AnnotationWindow:
         # Create a new PhotoImage to display
         self.tk_image = ImageTk.PhotoImage(image_to_display)
         
+        # Use self explaining variable instead of comment (it explains by itself, that deleting it is necessary in this case):
+        # is_canvas_empty = self.image_id is None
+        # if not is_canvas_empty:
+        #    self.canvas.delete(self.image_id)
         # If there's an existing image, delete it before displaying the new one
         if self.image_id is not None:
             self.canvas.delete(self.image_id)
