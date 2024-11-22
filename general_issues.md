@@ -8,6 +8,10 @@ General issues:
 - Error log in list_mode when the last list element was tracked and you press "Next": Error during cleanup: 'Sam2Class' object has no attribute 'inference_state'
 - If a second list element having the same video gets stored to the same JSON but has another damage class, then the masks get assigned to the already existing info, actually another "info" element should be added containing all the meta data of this damage
 - Use term "filepath" for a path to a file (i.e. "C:/Goerkem/rules.txt") and "path" else (i.e. "C:/Goerkem/")
+- The following Order of functions inside a class is crucial:
+  - 1. Magic functions
+  - 2. Public functions
+  - 3. Private functions
 
 General suggestions:
 - Build Sam2Predictor outside Sam class and set it in sam class from outside

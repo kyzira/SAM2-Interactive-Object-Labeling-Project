@@ -32,8 +32,21 @@ class Sam2Class:
 
         self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
-    # Maybe you should just call the function "set_images" or "load", because the user must not know about what exactly happens with them inside this class
+        # Better make a private functions all call them in here:
+        # def __setup_torch():
+        #     torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+        #     if torch.cuda.get_device_properties(0).major >= 8:
+        #         torch.backends.cuda.matmul.allow_tf32 = True
+        #         torch.backends.cudnn.allow_tf32 = True
+        
+        # def __load_model(checkpoint_filepath: str, model_filepath: str) -> bool:
+        #     # check if both paths are not empty and exist, else print error and return False
+        #     self.predictor = build_sam2_video_predictor(checkpoint_filepath, model_filepath)
+        #     return True
+
+    # Maybe you should just call the function "load", because the user must not know about what exactly happens with them inside this class
     # This makes it simpler from outside.
+    # Also rename "frame_dir" to "frame_path"
     def init_predictor_state(self, frame_dir=None):
         """
             Initialize SAM2:
@@ -43,6 +56,13 @@ class Sam2Class:
                 - When changing the frame_dir, or the images in it.
         """
         try:
+            # Better:
+            # if not frame_path:
+            #    print(f"Cannot load images because frame path does not exist: {frame_path}")
+            #    return False
+            # 
+            # self.frame_path = frame_path
+            # etc.
             if frame_dir:
                 self.frame_dir = frame_dir
                 
@@ -52,6 +72,7 @@ class Sam2Class:
         except Exception as e:
             print(f"Error: Initializing failed: {e}")
 
+    # This function is only used inside this class, so make it private
     def reset_predictor_state(self):
         """
             Resets the predictors state:
@@ -60,7 +81,28 @@ class Sam2Class:
         """
         self.predictor.reset_state(self.inference_state)
 
-    # Just pass the points, labels and frame_index separate, this is of no benefit
+    # Just pass the points, labels and frame_index separate, this is of no benefit.
+    # Since points, labels and frame_index all belong together, it even would be better to make an extra 
+    # dataclass containing those values. Dict is very useful to make a quick "class", but the problem is that
+    # you only know its structure if you search for the place where it is defined or you debug through the code.
+    # You can define the following data class in this file, import it in the class that calls this function, fill
+    # it there and pass the data class as parameter to this function:
+    # from dataclasses import dataclass
+    # @dataclass
+    # class SamPoint:
+    #     x: flat
+    #     y: float
+    #     frame_index: int
+    #     object_class_id: int
+    #     label: str
+    #
+    # Outside of class:
+    # point_1 = SamPoint(0.3, 0.5, 2, 0, "Crack")
+    # sam_model.add_points([point_1])
+    # 
+    # def add_points(points: list[SamPoint]) -> bool:
+
+    # Also: Why is it called "add_point" but you pass multiple points? Better call it add_points
     def add_point(self, points_labels_and_frame_index: dict, object_class_id: int):
         """
             Adds points to a specific frame for a specific object class to SAM2.
@@ -106,8 +148,15 @@ class Sam2Class:
         
         return mask
 
+    # If it's deprecated why is it still used?
+    # A better function name would be "track_objects"
     def propagate_in_video(self) -> dict:
         "Deprecated Function, used to track through whole video"
+
+        # Why don't you call self.reset_predictor_state() in this function?
+        # What if propagate_through_interval was already called before this function was called? 
+
+        # If SAM is not initialized, does it really make sense to continue this function?
         if self.initialized == False:
             print("Error: Sam not Initialized!")
 
@@ -134,6 +183,11 @@ class Sam2Class:
 
         return video_segments
     
+    # 1. Rename "start" and "end" to "start_frame_index"/"end_frame_index".
+    # 2. Also better call it something like "track_objects", the parameters "start_frame_index"/"end_frame_index" should be self explaining.
+    # 3. Since "button_states" thematically has nothing to do with tracking the object, find a way to only pass the actual
+    # thematically relevant info or set it in another function
+    # 4. This function is pretty long, it probably makes sense to break it down into multiple private methods processing intermediate steps
     def propagate_through_interval(self, frames, button_states, start: int, end: int) -> dict:
         if not self.initialized:
             print("Error: SAM not Initialized!")
