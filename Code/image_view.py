@@ -3,7 +3,13 @@ import os
 import cv2
 import numpy as np
 
-# I think "ImageInfo" would be a better class name, because the term "view" only implies something like pixels and no meta data.
+# This class seems to have two different purposes:
+# 1. Being a container holding all different kind of information for frames
+# 2. Drawing information on images/converting masks
+# This makes the class too unspecific, better split it into two classes:
+# - One class that holds a list of images with all their additional metadata (you could call it "ImageInfo", 
+#   because the term "view" only implies something like pixels and no meta data or something that is read-only and only can be viewed. )
+# - Another class that takes an image, draws things in it and return the result
 class ImageView:
     """
     This class stores info for a frame.
@@ -21,6 +27,7 @@ class ImageView:
         self.img_size = self.__image.size
 
         self.__borders = {"Marked": False}
+        # "data" is the most unclear variable name possible :D please find another name
         self.__data = {}
 
     def get_image(self):
@@ -35,6 +42,7 @@ class ImageView:
     def get_image_name(self):
         return os.path.basename(self.__image_path)
     
+    # Frame number is the same as frame index, right? Then please name it the same
     def get_frame_num(self):
         return int(os.path.basename(self.__image_path).split(".")[0])
     
@@ -44,6 +52,7 @@ class ImageView:
     def get_image_size(self):
         return self.__image.size
 
+    # Please add documentation, what is a border? Is it a color, a flag, coordinates?
     def get_border_value(self, observation: str, border = None):
         if border:
             return self.__borders[observation].get(border)
@@ -78,6 +87,9 @@ class ImageView:
             self.__data[observation] = {} 
         self.__data[observation][type] = data
 
+    # What does the function do? I cannot imply that, I see "button_states", but since it is a dict it can be everything and I have know idea what "intervals" could be in the context of drawing something.
+    # The problem is that those two parameters have nothing todo with drawing per se, you use them in the function to imply information you need, but at the scope of this function it does not make sense.
+    # So you either have to rename the function or you need to extract the data out of your parameters that you really need and pass only them to the function.
     def draw(self, button_states: dict, intervals: list):
         self.reset_drawn_image()
 
@@ -241,6 +253,8 @@ class ImageView:
     def reset_drawn_image(self):
         self.__drawn_image = self.__image.copy()
 
+    # I see this class as a stateless container holding information. So in this context "close" does not make sense, "clear" or "reset" would be better.
+    # "Close" is used in a context where you open the object once, do stuff with it and close it at the end.
     def close_image_view(self):
         self.__data = None
         self.__image = None

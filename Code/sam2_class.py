@@ -15,6 +15,7 @@ class Sam2Class:
 
         # Initialize the predictor as needed
         if not sam_paths:
+            # Do not hardcode the filepaths in this class, if you want to do that do it somewhere outside, because it is very unexpected from outside that this happens
             sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
             model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
         else:
@@ -59,6 +60,7 @@ class Sam2Class:
         """
         self.predictor.reset_state(self.inference_state)
 
+    # Just pass the points, labels and frame_index separate, this is of no benefit
     def add_point(self, points_labels_and_frame_index: dict, object_class_id: int):
         """
             Adds points to a specific frame for a specific object class to SAM2.
@@ -98,6 +100,7 @@ class Sam2Class:
         mask = (out_mask_logits[0] > 0.0).cpu().numpy()
         obj_id = out_obj_ids[0]
 
+        # What does it mean if they are not the same? Is it a good idea to still return the mask in this case?
         if obj_id != object_class_id:
             print("Error: Class object IDs are not the same!")
         

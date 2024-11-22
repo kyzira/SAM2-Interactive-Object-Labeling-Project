@@ -3,10 +3,66 @@ import os
 from datetime import datetime
 
 
+# You can easily improve the structure of this class and make it much simpler by the following way:
+# class JsonAnnotationManager:
+# def __init__(self):
+#     self.__json_data = dict()
+#     self.__json_filepath = ""
+
+# def load(self, json_filepath: str) -> bool:
+#     if not os.path.exists(json_filepath):
+#         print(f"Cannot open JSON, because it does not exist: {json_filepath}")
+#         return False
+#     try:
+#         with open(json_filepath, "r") as file:
+#             self.__json_data = json.load(file)
+#             self.__json_filepath = json_filepath
+#             print("JSON loaded Successfully")
+#             return True
+#     except Exception as error_message:
+#         print(f"Error opening JSON file \"{json_filepath}\": {error_message}")
+#         return False
+    
+# def is_loaded(self) -> bool:
+#     return self.__json_data and self.__json_filepath
+
+# def reset(self) -> None:
+#     self.__json_data = dict()
+#     self.__json_filepath = ""
+    
+# def add_damage_info(self, damage_info: dict) -> bool:
+#     if not self.is_loaded:
+#         print("Cannot add damage info, because no JSON file is openend")
+#         return False
+    
+#     observation_name_and_time = f"{damage_info['Label']}, at {damage_info['Videozeitpunkt (h:min:sec)']}"
+    
+#     # Create a list of relevant keys from config.yaml
+#     info_already_existing = "Info" in self.__json_data
+#     if info_already_existing:
+#         observation_already_documented = observation_name_and_time in self.__json_data["Info"]["Documented Observations"]
+#         if not observation_already_documented:
+#             self.__json_data["Info"]["Documented Observations"].append(observation_name_and_time)
+#         self.save_json_to_file()
+#         return True
+    
+#     # Initialize the "Info" dictionary
+#     self.__json_data["Info"] = {}
+#     for key in damage_info.keys():
+#         self.__json_data["Info"][key] = damage_info[key]
+#     self.__json_data["Info"]["Documented Observations"] = [observation_name_and_time]
+#     self.save_json_to_file()
+#
+# etc.
+
+# Since this class does not just read/write generic JSON files but JSONS with annotations, i would rename it something like 
+# "JsonAnnotationManager" ("manager" also not good since it can mean anything, but I can't think of anything better)
 class JsonReadWrite:
     """
     This class handles interaction with the dict in which all data is stored and its json file, in which it will be stored.
     """
+    # In the context of this class "table_row" does not make any sense. Since a table row contains infos about a damage "damage_info" would be better.
+    # Furthermore I think it would also be better to also rename the JSON key "info" to "damage_infos"
     def __init__(self, json_path, table_row={}):
         self.__json_data = dict()
         self.json_path = json_path
@@ -27,7 +83,7 @@ class JsonReadWrite:
         
     def reset_json(self):
         self.__json_data = dict()
-         
+
     def load_json_from_file(self):
         if os.path.exists(self.json_path):
             try:
@@ -39,6 +95,8 @@ class JsonReadWrite:
                 print("Error: JSON is corrupt or broken.\nBacking it up and creating a new JSON!")
                 self.__backup_and_reset_json()    
         
+        # You function name is "load from file", it is very unexpected that this function creates a new json
+        # Better make two functions: 
         # If the JSON file does not exist, create it with default info_table
         self.__json_data = dict()
         self.save_json_to_file()

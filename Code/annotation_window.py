@@ -92,6 +92,7 @@ class AnnotationWindow:
         # This returns the size and position of the annotation window
         return self.window_maximized, self.geometry_data
     
+    # better "get_frame_index" to make clear it's about the frame
     def get_index(self):
         return self.frame_index
 
@@ -110,6 +111,9 @@ class AnnotationWindow:
         self.geometry_data = self.annotation_window.geometry()
 
     def __on_click(self, event):
+        # The following comments are not needed, because the code is self explaining, they unnecessarily bloat the code.
+        # If you think something is not clear, try to find variable names that are more self explaining. If you do not find
+        # a good way, then you can use a comment.
         # Get the coordinates of the click
         x, y = event.x, event.y
         # Canvas size
