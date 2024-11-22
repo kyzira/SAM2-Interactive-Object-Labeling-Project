@@ -13,11 +13,13 @@ General suggestions:
 - It would make more sense to store current_index.txt at the same location as the csv file of the table path, because it only makes sense in combination with this file
 - Take care of making functions private if they should only be used internally
 - Getter functions do not need to contain "get" (does not bring any benefit), so better rename them, i.e. get_damage_table_row() => damage_table_row()
+- What do you think about renaming "geometry_data" (i.e. annotation_window_geometry_data) into "window_properties"? In my opinion "geometry" is a bit confusing in the context of the program,
+  I first thought this is about the mask polygons. By naming it "window_properties" you directly know the context and understand it refers to the window
 - You sometimes call the index of a frame "frame_index" (in annotation_window.py) and sometimes "frame" (in frame_extration.py). Better always call it "frame_index", i.e. "start_frame_index"
-- Function should be enclosed with """ instead of # (i.e. in annotation_window::__create_propagated_image)
-- You should always set a type hint for the return value of a function, so the viewer can directly understand the inputs and outputs of a function, i.e.:  
+- Function documentation should be enclosed with """ instead of # (i.e. in annotation_window::__create_propagated_image)
+- You should always set a type hint for the parameters and return value of a function, so the viewer can directly understand the inputs and outputs of a function, i.e.:  
   ``` python
-  def get_image_size(self) -> tuple[int, int]:
+  def get_image_size(self, img_index: int) -> tuple[int, int]:
   ```
 - I personally prefer calling functions from imported modules as the following, so you directly understand where the called function origins from:
   ``` python
