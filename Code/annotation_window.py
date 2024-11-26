@@ -1,6 +1,9 @@
 import tkinter as tk
 from PIL import Image, ImageTk
-from image_view import ImageView
+from image_info import ImageInfo
+from draw_image_info import DrawImageInfo
+import cv2
+import numpy as np
 
 class AnnotationWindow:
     """
@@ -22,7 +25,7 @@ class AnnotationWindow:
                 These lists can then be used to track the object throughout the whole video.
     """
 
-    def __init__(self, img_view:ImageView, color:str):
+    def __init__(self):
         self.annotation_window = None
         self.canvas = None
 
@@ -34,11 +37,12 @@ class AnnotationWindow:
         self.polygons = []
         self.order_of_addition = []
 
-        self.img_view = img_view
-        self.color = color
+        self.image_info = None
+        self.color = None
 
         self.geometry_data = None
-        self.window_maximized = False
+        self.is_maximized = False
+
 
         self.sam_model = None
         self.object_class_id = None
@@ -50,49 +54,97 @@ class AnnotationWindow:
         self.resized_width = None
         self.resized_height = None
 
-    def init_window(self, window_geometry:dict):
-        annotation_window = tk.Toplevel()
-        annotation_window.title(f"Punkte hinzufügen")
-        annotation_window.grab_set()
+        self.__left_click = '<Button-1>'
+        self.__right_click = '<Button-3>'
 
-        if window_geometry.get("Maximized", False) == True:
-            annotation_window.state("zoomed")
-        elif window_geometry.get("Geometry"):
-            annotation_window.geometry(window_geometry["Geometry"])
+        self.is_set = {
+            "Settings" : False,
+            "Image Info" : False,
+            "Segmenter" : False
+        }
+
+
+    def set_settings(self, geometry_data = None, is_maximized = False):
+        self.geometry_data = geometry_data
+        self.is_maximized = is_maximized
+        self.is_set["Settings"] = True
+
+    def set_image_info(self, image_info: ImageInfo):
+        if image_info is None:
+            print("Error: Image Info is None!")
+            return
+        
+        self.image_info = image_info
+
+        for i, damage_info in enumerate(self.image_info.values()):
+            if damage_info.is_selected == True:
+                self.object_class_id = i
+                self.color = self.__get_color(color_index=i)
+
+                self.is_set["Image Info"] = True
+                break
+        
+        print("Error: Selected Damage couldnt be found!")
+        print("Using Orbitrary Value: 0")
+        self.object_class_id = 0
+        self.color = self.__get_color(color_index=0)
+
+    def set_segmenter(self, sam_model, frame_index):
+        """
+        Args:
+            sam_model: Loaded SAM2 Model
+            frame_index: Index in relation to loaded Images, !not frame number!
+        """
+        if self.is_set["Image Info"] == False:
+            print("Error: Set Image Info before the Segmenter!")
+            return
+        
+        if sam_model is None:
+            print("Error: SAM2 is None!")
+            return
+        
+        self.sam_model = sam_model
+        self.frame_index = frame_index
+        self.is_set["Segmenter"] = True
+        
+    def get_geometry(self):
+        # This returns the size and position of the annotation window
+        return self.is_maximized, self.geometry_data
+    
+    def open(self):
+        self.__create_window()
+        self.__draw_image_on_canvas()
+
+        # Bind the window close event to a custom method
+        self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
+        self.annotation_window.mainloop()
+
+        print("Passed Mainloop")
+
+
+    def __create_window(self):
+        self.annotation_window = tk.Toplevel()
+        self.annotation_window.title(f"Punkte hinzufügen")
+        self.annotation_window.grab_set()
+
+        if self.is_maximized:
+            self.annotation_window.state("zoomed")
+        elif self.geometry_data:
+            self.annotation_window.geometry(self.geometry_data)
         else:
-            annotation_window.geometry(f"{self.img_view.get_image().width}x{self.img_view.get_image().height}")  # Set initial window size to image size
+            self.annotation_window.geometry(f"{self.image_info.drawn_image.width}x{self.image_info.drawn_image.height}")  # Set initial window size to image size
 
         # Create a canvas
-        self.canvas = tk.Canvas(annotation_window)
+        self.canvas = tk.Canvas(self.annotation_window)
         self.canvas.pack()
 
         # Change image width when resizing
-        annotation_window.bind('<Configure>', self.__on_resize)
+        self.annotation_window.bind('<Configure>', self.__on_resize)
         # Bind mouse click and key press events 
-        self.canvas.bind('<Button-1>', self.__on_click)  
-        self.canvas.bind('<Button-3>', self.__on_click)
+        self.canvas.bind(self.__left_click, self.__on_click)  
+        self.canvas.bind(self.__right_click, self.__on_click)
         self.canvas.bind('<Key>', self.__on_key_press)
         self.canvas.focus_set()
-        # Add a protocol to handle window close
-        annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
-
-        self.annotation_window = annotation_window
-        self.__draw_image_on_canvas()
-
-    def init_sam(self, frame_index, object_class_id, sam_model):
-        self.frame_index = frame_index
-        self.object_class_id = object_class_id
-        self.sam_model = sam_model
-
-    def get_points_and_labels(self):
-        return self.points, self.polygons
-    
-    def get_geometry(self):
-        # This returns the size and position of the annotation window
-        return self.window_maximized, self.geometry_data
-    
-    def get_index(self):
-        return self.frame_index
 
     def __on_resize(self, event):
         # Update canvas size to match window size
@@ -105,8 +157,20 @@ class AnnotationWindow:
     def __on_close(self):
         # This function is called when the annotation window is closed
         if self.annotation_window.state() == "zoomed":
-            self.window_maximized = True
+            self.is_maximized = True
         self.geometry_data = self.annotation_window.geometry()
+
+        if len(self.points.get("1", [])) == 0 and len(self.points.get("0", [])) == 0:
+            self.sam_model.reset_predictor_state()
+
+        else:
+            self.annotation_window_geometry_data["Maximized"], self.annotation_window_geometry_data["Geometry"] = self.annotation_window.get_geometry()
+            index = self.annotation_window.get_index()
+
+
+        # Clean up any resources or state related to the AnnotationWindow
+        self.annotation_window.destroy()
+        print("Annotation Window closed")
 
     def __on_click(self, event):
         # Get the coordinates of the click
@@ -115,38 +179,41 @@ class AnnotationWindow:
         canvas_width = self.canvas.winfo_width()
         canvas_height = self.canvas.winfo_height()
         # actual image size
-        image_width, image_height = self.img_view.get_drawn_image().size
+        image_width, image_height = self.image_info.img_size
 
         # Clicked Coordinates in relation to actual image pixels
         image_x = int(image_width * (x / canvas_width))
         image_y = int(image_height * (y / canvas_height))
 
-        if event.num == 1: # left click
+        if event.num == 1:  # Left click
             self.points["1"].append([image_x, image_y])
             self.order_of_addition.append(1)
-        elif event.num == 3: # right click
+        elif event.num == 3:  # Right click
             self.points["0"].append([image_x, image_y])
             self.order_of_addition.append(0)
 
-        self.__create_propagated_image()
+
+        self.__create_segmented_image()
 
     def __on_key_press(self, event):
         # Remove last added Point
-        if event.keysym == "BackSpace":
-            if len(self.order_of_addition) == 0:
-                return
-            
-            label = self.order_of_addition.pop()
-            self.points[str(label)].pop()
-            if len(self.order_of_addition) == 0:
-                self.img_view.reset_drawn_image()
-            else:
-                self.__create_propagated_image()
-            
-            self.__draw_image_on_canvas()
+        if event.keysym != "BackSpace":
+            return
+        
+        if len(self.order_of_addition) == 0:
+            return
+        
+        label = self.order_of_addition.pop()
+        self.points[str(label)].pop()
+        if len(self.order_of_addition) == 0:
+            self.image_info.reset_drawn_image()
+        else:
+            self.__create_segmented_image()
+        
+        self.__draw_image_on_canvas()
 
     def __draw_image_on_canvas(self):
-        image_to_display = self.img_view.get_drawn_image()
+        image_to_display = self.image_info.drawn_image.copy()
 
         if self.resized_width and self.resized_height:
             image_to_display = image_to_display.resize((self.resized_width, self.resized_height), Image.Resampling.LANCZOS)
@@ -161,20 +228,28 @@ class AnnotationWindow:
         # Create a new image on the canvas
         self.image_id = self.canvas.create_image(0, 0, anchor=tk.NW, image=self.tk_image)
 
-    def __create_propagated_image(self):
+    def __create_segmented_image(self):
         # Give the list of clicked points to Sam, get a mask back, convert the mask into polygons and then draw them
         if not self.points:
             return
         if not len(self.points["1"]) and not len(self.points["0"]):
             return
         
-        masks = self.__propagate_image()  # Get the mask from your existing propagate method
-        self.polygons = self.img_view.draw_and_convert_masks(masks, self.color)
-        self.img_view.draw_points(self.points)
+        self.polygons = self.__segment_image()  # Get the mask from your existing propagate method
+
+
+        if self.selected_damage is None:
+            print("No selected Damage")
+            return
         
+        self.image_info.data_coordinates[self.object_class_id].positive_point_coordinates = self.points.get("1")
+        self.image_info.data_coordinates[self.object_class_id].negative_point_coordinates = self.points.get("0")
+        self.image_info.data_coordinates[self.object_class_id].mask_polygon = self.polygons
+
+        DrawImageInfo.draw(self.image_info)
         self.__draw_image_on_canvas()
 
-    def __propagate_image(self):
+    def __segment_image(self):
         # Prepare the structure and then send to sam
 
         points = []
@@ -197,4 +272,39 @@ class AnnotationWindow:
         if len(mask) == 0:
             print("Error: Mask length == 0")
 
-        return mask
+        polygons = []
+        mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1
+        
+        # Extract contours using OpenCV
+        contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        for contour in contours:
+            # Simplify the contour using approxPolyDP
+            epsilon = 0.0005 * cv2.arcLength(contour, True)  # Adjust epsilon for simplification level
+            simplified_contour = cv2.approxPolyDP(contour, epsilon, True)
+
+            # Convert contour points to a list of tuples
+            simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
+            polygons.append(simplified_contour)
+        return polygons
+    
+
+    def __get_color(self, color=None, color_index=None) -> tuple:
+        color_map = {
+            "red": (255, 0, 0, 100),
+            "blue": (0, 0, 255, 100),
+            "green": (0, 255, 0, 100),
+            "yellow": (255, 255, 0, 100),
+            "magenta": (255, 0, 255, 100),
+            "red_full": (255, 0, 0, 255),
+            "blue_full": (0, 0, 255, 255),
+            "green_full": (0, 255, 0, 255),
+            "yellow_full": (255, 255, 0, 255),
+            "magenta_full": (255, 0, 255, 255),
+        }
+        if color:
+            return color_map.get(color)
+        if color_index is not None:
+            color_keys = list(color_map.keys())
+            return color_map[color_keys[color_index % len(color_keys)]]
+        raise ValueError("Either 'color' or 'color_index' must be provided.")

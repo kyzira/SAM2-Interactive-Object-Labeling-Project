@@ -2,41 +2,33 @@ import torch
 from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import numpy as np
 import gc
-from image_info import ImageInfo
+
 class Sam2Class:
     """
     This Class manages the interaction with SAM2.
     Here the given parameters will be formattet correctly and when propagating through the video, will set up SAM according to the intervall it currently tracks.
     """
-    def __init__(self, checkpoint_filepath: str, model_filepath: str):
+    def __init__(self, sam_paths):
         # Initialize the predictor as needed
+        if not sam_paths:
+            sam2_checkpoint = r"C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_tiny.pt"
+            model_cfg = "configs/sam2.1/sam2.1_hiera_t.yaml"
+        else:
+            sam2_checkpoint = sam_paths["sam2_checkpoint"]
+            model_cfg = sam_paths["model_cfg"]
 
         self.frame_dir = None
         torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
         self.initialized = False
 
-        self.__setup_torch()
-        self.initialized = self.__load_model(checkpoint_filepath, model_filepath)
-
-        if not self.initialized:
-            raise Exception("Error: Segmentation Model couldnt be loaded!")
-
-
-    # Better make a private functions all call them in here:
-    def __setup_torch():
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
         if torch.cuda.get_device_properties(0).major >= 8:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
-    
-    def __load_model(self, checkpoint_filepath: str, model_filepath: str) -> bool:
-        # check if both paths are not empty and exist, else print error and return False
-        self.predictor = build_sam2_video_predictor(checkpoint_filepath, model_filepath)
-        return True
+
+        self.predictor = build_sam2_video_predictor(model_cfg, sam2_checkpoint)
 
 
-
-    def load(self, frame_dir=None):
+    def init_predictor_state(self, frame_dir=None):
         """
             Initialize SAM2:
                 Load the images from the given directory and set inference state to its starting values.
@@ -44,19 +36,17 @@ class Sam2Class:
                 - When initializing SAM2
                 - When changing the frame_dir, or the images in it.
         """
-        if not frame_dir and not self.frame_dir:
-            print("Error: No frame directory given!")
-            return
-        
-        elif frame_dir:
-            self.frame_dir = frame_dir
-            
-        self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
+        try:
+            if frame_dir:
+                self.frame_dir = frame_dir
+                
+            print("SAM initialized")
+            self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
+            self.initialized = True
+        except Exception as e:
+            print(f"Error: Initializing failed: {e}")
 
-
-
-
-    def __reset_predictor_state(self):
+    def reset_predictor_state(self):
         """
             Resets the predictors state:
                 After Tracking has started, it is not possible to add new or other Objects to SAM.
@@ -64,31 +54,26 @@ class Sam2Class:
         """
         self.predictor.reset_state(self.inference_state)
 
-    def add_points(self, image_info: ImageInfo):
+    def add_point(self, points_labels_and_frame_index: dict, object_class_id: int):
         """
             Adds points to a specific frame for a specific object class to SAM2.
-            The points describe SAM where the Object is, and where it is not. 
+            The points describe SAM where the Object is, and where it isnt. 
             Depending on these added points the tracking is done.
+
+            points_labels_and_frame_index -> a dict with the keys:  Points = [[x1, y1], ...], Labels = [int, int, ...], Image Index = int
         """
 
-        if not image_info:
-            print("Error: Image Info not set")
+        if not points_labels_and_frame_index:
+            print("Error: points, labels or frame index not set")
             return
 
         if not self.initialized:
             print("Error: Sam not initialized correctly")
             return
         
-        points, labels, selected_object_id = None, None, None
-        for i, damage_info in enumerate(image_info.data_coordinates):
-            if damage_info.is_selected == True:
-                selected_object_id = i
-
-                points = damage_info.positive_point_coordinates + damage_info.negative_point_coordinates
-                labels = [1] * len(damage_info.positive_point_coordinates) + [0] * len(damage_info.negative_point_coordinates)
-                break
-
-        frame_index = image_info.image_index
+        points = points_labels_and_frame_index.get("Points")
+        labels = points_labels_and_frame_index.get("Labels")
+        frame_index = points_labels_and_frame_index.get("Image Index")
 
         if points is None or labels is None or frame_index is None:
             print(f"Error: Points {points}, labels {labels} or frame index {frame_index} is None!")
@@ -100,7 +85,7 @@ class Sam2Class:
         _, out_obj_ids, out_mask_logits = self.predictor.add_new_points_or_box(
             inference_state=self.inference_state,
             frame_idx=frame_index,
-            obj_id=selected_object_id,
+            obj_id=object_class_id,
             points=points_np,
             labels=labels_np,
         )
@@ -108,20 +93,48 @@ class Sam2Class:
         mask = (out_mask_logits[0] > 0.0).cpu().numpy()
         obj_id = out_obj_ids[0]
 
-        if obj_id != selected_object_id:
+        if obj_id != object_class_id:
             print("Error: Class object IDs are not the same!")
         
         return mask
+
+    def propagate_in_video(self) -> dict:
+        "Deprecated Function, used to track through whole video"
+        if self.initialized == False:
+            print("Error: Sam not Initialized!")
+
+        video_segments = dict()
+
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state):
+            video_segments[out_frame_idx] = {
+                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                for i, out_obj_id in enumerate(out_obj_ids)
+            }
+
+        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, reverse=True):
+            if out_frame_idx not in video_segments:
+                video_segments[out_frame_idx] = {}
+            for i, out_obj_id in enumerate(out_obj_ids):
+                if out_obj_id not in video_segments[out_frame_idx]:
+                    video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
+                else:
+                    # Optionally merge or update masks if needed
+                    video_segments[out_frame_idx][out_obj_id] = np.maximum(
+                        video_segments[out_frame_idx][out_obj_id],
+                        (out_mask_logits[i] > 0.0).cpu().numpy()
+                    )
+
+        return video_segments
     
-    def track_objects(self, frame_infos: list, start_frame_index: int, end_frame_index: int) -> dict:
+    def propagate_through_interval(self, frames, button_states, start: int, end: int) -> dict:
         if not self.initialized:
             print("Error: SAM not Initialized!")
             return
         
         # Reset SAM and add points from the middle frame
-        self.__reset_predictor_state()
+        self.reset_predictor_state()
         
-        print(f"Tracking from Frame {start_frame_index} to {end_frame_index}")
+        print(f"Tracking from Frame {start} to {end}")
         object_class_id = 0
         selected_observation = None
 

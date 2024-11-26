@@ -3,9 +3,7 @@ from tkinter import simpledialog, ttk
 from PIL import Image, ImageTk
 import os
 import time
-from image_info import ImageInfo
-from draw_image_info import DrawImageInfo
-from damage_info import DamageInfo
+from image_view import ImageView
 from annotation_window import AnnotationWindow
 from math import sqrt
 from json_read_write import JsonReadWrite
@@ -16,42 +14,38 @@ class MainWindow:
     """
     This Window shows an Grid of Images.
     """
-    def __init__(self):
+    def __init__(self, root, sam_model, next_callback, start_observation = None):
         super().__init__()
-
-        self.root = tk.Tk()
+        self.root = root
         self.root.title("Grid SAM Labeling Tool")
 
-        self.next_callback = None
+        self.next_callback = next_callback
+
         self.grid_size = 3  # Default grid size
         self.max_grid_size = None
 
-        self.image_infos = []
+        self.frames = []
         self.frame_dir = None
+
         self.frame_extraction = None
+
         self.json_read_write = None
 
+        self.create_widgets()
         self.root.bind("<MouseWheel>", self.on_scroll)
         self.root.bind("<Escape>", self.reset_left_click_modes)
 
-        self.sam_model = None
+        self.sam_model = sam_model
         self.annotation_window = None
 
         self.observations = []
-        self.start_observation = None
-
-        self.advance_buttons = None
-        self.evaluation_buttons = None
-        self.quick_extraction_buttons = None
+        self.start_observation = start_observation
+        self.disable_next_buttons = False
+        self.enable_evaluation_buttons = False
 
         self.button_states = {}
         self.selected_observation = None
         self.last_clicked_intervall = None
-
-        self.split_intervals = {}
-        self.marked_frames = []
-        self.split_start = None
-        self.split_end = None
 
         self.left_click_modes = {
             "Splitting" : False,
@@ -59,7 +53,6 @@ class MainWindow:
             "Deleting" : False,
             "Marking Up" : False
         }
-
         self.left_click_mode_colors = {
             "Splitting" : "lightblue",
             "Delete Split" : "indigo",
@@ -67,183 +60,136 @@ class MainWindow:
             "Marking Up" : "lightcoral"
         }
 
+        self.split_intervals = {}
+        self.marked_frames = []
+        self.split_start = None
+        self.split_end = None
+
         self.annotation_window_geometry_data = {
             "Maximized" : False,
             "Geometry" : None
         }
 
-        self.is_set = {
-            "Settings" : False,
-            "Frames" : False,
-            "Segmenter" : False,
-            "Json" : False
-        }
-
-    def set_frames(self, frame_dir:str):
+    def init_frames(self, frame_dir:str):
         """
         Reads the Folder for frames and creates a list of the frames as image_view instances
         """
-        try:
-            self.image_infos = []
-            self.frame_dir = frame_dir
-            if not frame_dir:
-                print("Error: can not init frames, frame dir empty")
-            
-            for file in sorted(os.listdir(frame_dir)):
-                if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                    file_path = os.path.join(frame_dir, file)
-                    image_info = ImageInfo(file_path)
-                    image_info.load_image()
-                    self.image_infos.append(image_info)
-            
-            self.is_set["Frames"] = True
-        except Exception as e:
-            print(f"failed setting frames! \nError: {e}")
+        self.frames = []
+        self.frame_dir = frame_dir
+        if not frame_dir:
+            print("Error: can not init frames, frame dir empty")
+        
+        for file in sorted(os.listdir(frame_dir)):
+            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
+                file_path = os.path.join(frame_dir, file)
+                image_view = ImageView(file_path)
+                self.frames.append(image_view)
+        
+        self.root.after(100, self.create_image_grid)
 
-
-    def set_settings(self, settings:dict):
+    def init_settings(self, settings:dict):
         """
         Reads the settings dict and sets Window and Grid Size
         """
+        window_width = settings.get("window_width", 800)
+        window_height = settings.get("window_height", 600)
 
-        try:
-            window_width = settings.get("window_width", 800)
-            window_height = settings.get("window_height", 600)
-
-            if window_height == 0 and window_width == 0:
-                self.root.state("zoomed")
-            else:  
-                self.root.geometry(f"{window_width}x{window_height}")
+        if window_height == 0 and window_width == 0:
+            self.root.state("zoomed")
+        else:  
+            self.root.geometry(f"{window_width}x{window_height}")
 
 
-            grid_size = settings.get("default_grid_size", 0)
-            if grid_size == 0:
-                self.grid_size = int(sqrt(len(self.image_infos))) + 1
-            else:
-                self.grid_size = grid_size
-            self.max_grid_size = int(sqrt(len(self.image_infos))) + 1
-        
-            self.is_set["Settings"] = True
-        except Exception as e:
-            print(f"failed setting settings! \nError: {e}")
+        grid_size = settings.get("default_grid_size", 0)
+        if grid_size == 0:
+            self.grid_size = int(sqrt(len(self.frames))) + 1
+        else:
+            self.grid_size = grid_size
+        self.max_grid_size = int(sqrt(len(self.frames))) + 1
 
-    def set_json(self, info_dict={}):
+    def init_json(self, info_dict={}):
         """
         Takes the information given from info_dict and saves it into the Info Key in the Json
         """
-        try:
-            json_dir = os.path.dirname(self.frame_dir)
-            json_path = os.path.join(json_dir, f"{os.path.basename(json_dir)}.json")
-            self.json_read_write = JsonReadWrite(json_path, info_dict)
-            self.__load_data_from_json()
-                
-            self.is_set["Json"] = True
-        except Exception as e:
-            print(f"failed setting json! \nError: {e}")
+        json_dir = os.path.dirname(self.frame_dir)
+        json_path = os.path.join(json_dir, f"{os.path.basename(json_dir)}.json")
 
-    def set_segmenter(self, sam_model):
-        try:
-            self.sam_model = sam_model
-            self.is_set["Segmenter"] = True
-        except Exception as e:
-            print(f"failed setting segmenter! \nError: {e}")
+        self.json_read_write = JsonReadWrite(json_path, info_dict)
 
-    def set_predefined_object_classes(self, predefined_object_classes:list):
-        """
-        Takes the object_add_buttons list and adds the entries to the "Add" Drop down menu.
-        disable_next_buttons: When True doesnt create the Next and Skip Buttons on the window.
-        enable_evaluation_buttons: When True creates a Good and a Bad Button on the window for evaluation.
-        """
-        for observation in predefined_object_classes:
-            self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.__add_observation(observation=n))
-
-        self.create_first_row_widgets()
-        self.create_second_row_widgets()
-
-    def set_start_observation(self, start_observation):
-        self.start_observation = start_observation
-
-    def set_extra_buttons(self, advance_buttons = True, evaluation_buttons = False, quick_extraction_buttons = True):
-        self.advance_buttons = advance_buttons
-        self.evaluation_buttons = evaluation_buttons
-        self.quick_extraction_buttons = quick_extraction_buttons
-
-
-    def open(self):
-    
-        # Check if the important values are set
-        for key, is_set in self.is_set.items():
-            if is_set == True:
-                continue
-            print(f"Error: {key} is not set! Aborting...")
-            return
-        
-        self.__draw_overlays()
-        self.__create_window()
-
-        self.root.protocol("WM_DELETE_WINDOW", lambda: self.close_window())
-        self.root.mainloop()
-
-
-    def __load_data_from_json(self):
         json_data = self.json_read_write.get_json()
 
         self.marked_frames = json_data["Info"].get("Marked Frames", [])
         self.split_intervals = json_data["Info"].get("Instance Intervals", {})
 
         if self.start_observation:
-            self.__add_observation(self.start_observation)
+            self.add_observation(self.start_observation)
 
-        # Check which Observations already in Json
         for value in json_data.values():
             if "Observations" in value:
                 for observation in value["Observations"].keys():
                     if observation not in self.observations:
                         self.observations.append(observation)
 
-        for i, image_info in enumerate(self.image_infos):
-            frame_num = image_info.frame_num
-            frame_data = json_data.get(str(int(frame_num)))
-            image_info.image_index = i
+        # Load Info for all frames
+        self.root.after(100, self.add_overlay_to_frames())
 
-            if frame_data == None:
-                continue
+    def init_add_observations_menu(self, object_add_buttons:list, disable_next_buttons = False, enable_evaluation_buttons = False):
+        """
+        Takes the object_add_buttons list and adds the entries to the "Add" Drop down menu.
+        disable_next_buttons: When True doesnt create the Next and Skip Buttons on the window.
+        enable_evaluation_buttons: When True creates a Good and a Bad Button on the window for evaluation.
+        """
+        for observation in object_add_buttons:
+            self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.add_observation(observation=n))
 
-            if frame_num in self.marked_frames:
-                image_info.is_marked = True
+        self.disable_next_buttons = disable_next_buttons
+        self.enable_evaluation_buttons = enable_evaluation_buttons
 
-            for observation, coordinate_dict in frame_data.items():
-                damage_info = DamageInfo(observation)
-                damage_info.mask_polygon = coordinate_dict["Mask Polygon"]
-                damage_info.positive_point_coordinates = coordinate_dict["Points"]["1"]
-                damage_info.negative_point_coordinates = coordinate_dict["Points"]["0"]
+        self.create_first_row_widgets()
+        self.create_second_row_widgets()
 
+    def init_frame_extraction_buttons(self, frame_extraction: FrameExtraction, extract_seconds_buttons_enable: bool):
+        """
+        When the start and end of the cut out video frames are known and saved in frame_extraction, this creates buttons to quickly cut out 10 more seconds of frames in either direction
+        """
+        self.frame_extraction = frame_extraction
 
-                for (begin_frame_index, end_frame_index) in self.split_intervals[observation]:
-                    if begin_frame_index <= frame_num <= end_frame_index:
-                        damage_info.is_in_intervall = True
-                    
-                        if begin_frame_index == frame_num:
-                            damage_info.is_start_of_intervall = True
-                        elif end_frame_index == frame_num:
-                            damage_info.is_end_of_intervall = True
+        if extract_seconds_buttons_enable:
+            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10, False), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(10, True), height=2, width=10).pack(side="right", padx=5, pady=5)
 
-                image_info.data_coordinates.append(damage_info)
-
-
-    def __create_window(self):
-        self.__create_layout()
-        self.__create_menubar()
-        self.__create_observation_widgets()
-        self.__create_frame_extraction_widgets()
-        self.__create_management_widgets()
-        self.__create_image_grid()
-
-
-    def __create_layout(self):
+    def create_widgets(self):
         # Configure grid layout for the root window
         self.root.grid_rowconfigure(2, weight=1)  # Middle frame resizes
         self.root.grid_columnconfigure(0, weight=1)  # Frames span full width
+
+        # Create a menu
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        self.add_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Add Options", menu=self.add_menu)
+        self.add_menu.add_command(label="Add <Text>", command=self.add_observation)
+        
+        # Add options to change grid size
+        grid_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Grid Options", menu=grid_menu)
+        grid_menu.add_command(label="Reload Grid", command=self.create_image_grid)
+        grid_menu.add_command(label="Redraw Images", command=self.draw_overlays_on_image_views)
+        grid_menu.add_command(label="Change Grid Size", command=self.prompt_grid_size)
+
+        # Add options to change grid size
+        sam_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="SAM2 Options", menu=sam_menu)
+        sam_menu.add_command(label="Reset SAM2", command=lambda: self.sam_model.reset_predictor_state())
+        sam_menu.add_command(label="Reinit SAM2", command=lambda: self.sam_model.init_predictor_state())
+
+        left_click_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Frame Properties", menu=left_click_menu)
+        left_click_menu.add_command(label="New Split", command=lambda n="Splitting": self.set_left_click_mode(n))
+        left_click_menu.add_command(label="Mark up Frames", command=lambda n="Marking Up": self.set_left_click_mode(n))
+        left_click_menu.add_command(label="Delete Split", command=lambda n="Delete Split": self.set_left_click_mode(n))
+        left_click_menu.add_command(label="Delete Label", command=lambda n="Deleting": self.set_left_click_mode(n))
 
         # Top frame
         self.first_frame = tk.Frame(self.root, bg="lightgrey", height=50)
@@ -271,7 +217,10 @@ class MainWindow:
 
         # Scrollable frame within canvas
         self.scrollable_frame = tk.Frame(self.canvas)
-        self.scrollable_frame.bind("<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
 
         self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         self.canvas.configure(yscrollcommand=self.scrollbar.set)
@@ -281,169 +230,101 @@ class MainWindow:
 
         # Handle window resizing
         self.middle_frame.bind("<Configure>", self.resize_images)
-
-    def __create_menubar(self):
-        # Create a menu
-        menubar = tk.Menu(self.root)
-        self.root.config(menu=menubar)
-
-        self.add_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Add Options", menu=self.add_menu)
-        self.add_menu.add_command(label="Add <Text>", command=self.__add_observation)
         
-        # Add options to change grid size
-        grid_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Grid Options", menu=grid_menu)
-        grid_menu.add_command(label="Reload Grid", command=self.__create_image_grid)
-        grid_menu.add_command(label="Redraw Images", command=self.draw_overlays)
-        grid_menu.add_command(label="Change Grid Size", command=self.prompt_grid_size)
 
-        # Add options to change grid size
-        sam_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="SAM2 Options", menu=sam_menu)
-        sam_menu.add_command(label="Reset SAM2", command=lambda: self.sam_model.reset_predictor_state())
-        sam_menu.add_command(label="Reinit SAM2", command=lambda: self.sam_model.init_predictor_state())
+    def create_first_row_widgets(self):
+        for widget in self.first_frame.winfo_children():
+            widget.destroy()
 
-        left_click_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Frame Properties", menu=left_click_menu)
-        left_click_menu.add_command(label="New Split", command=lambda n="Splitting": self.set_left_click_mode(n))
-        left_click_menu.add_command(label="Mark up Frames", command=lambda n="Marking Up": self.set_left_click_mode(n))
-        left_click_menu.add_command(label="Delete Split", command=lambda n="Delete Split": self.set_left_click_mode(n))
-        left_click_menu.add_command(label="Delete Label", command=lambda n="Deleting": self.set_left_click_mode(n))
+        first_button_selected = False
 
-
-    def __create_observation_widgets(self):
-        """Destroy all Buttons first and then recreate buttons for all self.observations entries"""
-
-        if self.button_states != {}:
-            for button_data in self.button_states.values():
-                if "Button" in button_data:
-                    button_data["Button"].destroy()
-
-                if "Visibility Button" in button_data:
-                    button_data["Visibility Button"].destroy()
-        
-        is_button_selected = False
-        colors = [
-            "red",  
-            "blue",  
-            "green",  
-            "yellow",  
-            "magenta"
-        ]
-
-        for idx, observation in enumerate(self.observations):
+        for observation in self.observations:
             if observation not in self.button_states:
                 self.button_states[observation] = {}
 
-            # Create the button and the visibility button
-            button = tk.Button(self.first_frame, text=observation, command=lambda n=observation: self.on_observation_button_pressed(n), height=2, width=10)
+            # Create the button
+            button = tk.Button(
+                self.first_frame,
+                text=observation,
+                command=lambda n=observation: self.on_observation_button_pressed(n),
+                height=2,
+                width=10
+            )
             button.pack(side="left", padx=5, pady=5)
 
-            visibility_button = tk.Button(self.second_frame, bg=color, command=lambda n=observation: self.on_visibility_button_pressed(n), height=2, width=10)
-            visibility_button.pack(side="left", padx=5, pady=5)
-
-
-            prior_visibility_state = self.button_states[observation].get("Visible", True)
-            if prior_visibility_state == True:
-                self.button_states[observation]["Visible"] = True
-                relief = "sunken"
-                color = colors[idx % len(colors)]
-            else:
-                relief = "raised"
-                color = "lightgrey"
-
-            visibility_button.config(relief=relief, bg=color)
-
-
-            prior_selected_state = self.button_states[observation].get("Selected", False)
-            if prior_selected_state == True:
-                button.config(relief="sunken")
-                is_button_selected = True
-            else:
-                button.config(relief="raised")
-
-
             self.button_states[observation]["Button"] = button
-            self.button_states[observation]["Visibility Button"] = button
-            self.button_states[observation]["Color"] = color
+
+            # Ensure the button stays in the same state as it was before, only reset if the state is new
+            if "Selected" not in self.button_states[observation]:
+                self.button_states[observation]["Selected"] = False
+                button.config(relief="raised")  # Default state for new button
+            elif self.button_states[observation]["Selected"]:
+                button.config(relief="sunken")  # Selected state
+                first_button_selected = True
 
         # Autoselect first button if none are selected
-        if not is_button_selected and self.observations:
+        if not first_button_selected and self.observations:
             first_observation = self.observations[0]
             self.button_states[first_observation]["Selected"] = True
             self.button_states[first_observation]["Button"].config(relief="sunken")
             self.selected_observation = first_observation
 
-
-    def __create_management_widgets(self):
-        """This function creates the Buttons on the top right."""
-        if self.advance_buttons == True:
+        # Create the button
+        if not self.disable_next_buttons:
             self.next_button = tk.Button(self.first_frame, text="Next", command=lambda: self.close_window(), height=2, width=10, bg="indianred")
             self.next_button.pack(side="right", padx=5, pady=5)
             self.skip_button = tk.Button(self.first_frame, text="Skip", command=lambda: self.close_window(skip=True), height=2, width=10, bg="indianred")
             self.skip_button.pack(side="right", padx=5, pady=5)
 
-        if self.evaluation_buttons == True:
+        if self.enable_evaluation_buttons:
             self.good_button = tk.Button(self.first_frame, text="Good", command=lambda: self.eval_video_tracking(state=True), height=2, width=10, bg="lightgray").pack(side="right", padx=5, pady=5)
             self.bad_button = tk.Button(self.first_frame, text="Bad", command=lambda: self.eval_video_tracking(state=False), height=2, width=10, bg="lightgray").pack(side="right", padx=5, pady=5)
 
         self.start_tracking_button = tk.Button(self.first_frame, text="Start Tracking", command=lambda: self.track_object_in_video(), height=2, width=10, bg="palegreen").pack(side="right", padx=5, pady=5)
         self.add_split_button = tk.Button(self.first_frame, text="Add new Split", command=lambda n="Splitting": self.set_left_click_mode(n), height=2, width=10, bg="lightblue").pack(side="right", padx=5, pady=5)
 
-    def __create_frame_extraction_widgets(self):
-        self.extract_from_video = tk.Button(self.second_frame, text="Extract from Video", command=lambda: self.open_extraction_window(), height=2, width=23).pack(side="right", padx=5, pady=5)
-
-        if self.quick_extraction_buttons == True:
-            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.on_extract_frames(10, False), height=2, width=10).pack(side="right", padx=5, pady=5)
-            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.on_extract_frames(10, True), height=2, width=10).pack(side="right", padx=5, pady=5)           
-
-    def __create_image_grid(self):
-        """Puts the images on the grid."""
-
-        self.image_references = []
-
-        orig_width, orig_height = self.image_infos[0].img_size
-        ratio = orig_height/orig_width
-
-        canvas_width = self.canvas.winfo_width()
-        cell_width = max((canvas_width - self.grid_size*9)//self.grid_size, 1)
-
-        # Clear the scrollable_frame before adding new labels
-        for widget in self.scrollable_frame.winfo_children():
+    def create_second_row_widgets(self):
+        for widget in self.second_frame.winfo_children():
             widget.destroy()
 
-        for i, image_info in enumerate(self.image_infos):
-            image = image_info.drawn_image.copy()
-            try:
-                image = image.resize((cell_width, int(cell_width*ratio)), Image.Resampling.LANCZOS)
-            except:
-                return
+        colors = [
+            "red",  # Red
+            "blue",  # Blue
+            "green",  # Green
+            "yellow",  # Yellow
+            "magenta"   # Magenta
+        ]
+
+        # Add buttons with colors based on their index
+        for idx, observation in enumerate(self.observations):
+            color = colors[idx % len(colors)]  # Cycle colors if there are more observations
             
-            photo = ImageTk.PhotoImage(image)
+            button = tk.Button(
+                self.second_frame,
+                bg=color,
+                command=lambda n=observation: self.on_visibility_button_pressed(n),
+                height=2,
+                width=10
+            )
+            button.pack(side="left", padx=5, pady=5)
 
-            # Store the reference to the image
-            self.image_references.append(photo)
+            self.button_states[observation]["Visibility Button"] = button
 
-            label = tk.Label(self.scrollable_frame, image=photo)
-            label.grid(row=i // self.grid_size, column=i % self.grid_size, padx=2, pady=2, sticky="nsew")
-            label.bind("<Button-1>", self.on_image_left_click)  # Bind click event
-            label.bind("<Button-3>", lambda event: self.set_left_click_mode("Splitting"))
+            # Handle the button's visibility and state
+            if self.button_states[observation].get("Visible") == True:
+                self.button_states[observation]["Visibility Button"].config(relief="sunken", bg=color)
+            elif self.button_states[observation].get("Visible") == False:
+                self.button_states[observation]["Visibility Button"].config(relief="raised", bg="lightgrey")
+            else:
+                self.button_states[observation]["Visible"] = True
+                self.button_states[observation]["Visibility Button"].config(relief="sunken", bg=color)
 
-        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+            self.button_states[observation]["Color"] = color
+        
+        self.extract_from_video = tk.Button(self.second_frame, text="Extract from Video", command=lambda: self.open_extraction_window(), height=2, width=23).pack(side="right", padx=5, pady=5)
 
-    def __draw_overlays(self):
-        """
-        for every image: Draws their masks and Borders on the shown image.
-        """
-        try:
-            for image_info in self.image_infos:
-                DrawImageInfo.draw(image_info)
-            
-            self.root.after(200, self.__create_image_grid)
-        except: pass
 
-    def __add_observation(self, observation=None):
+    def add_observation(self, observation=None):
         if observation == None:
             observation = simpledialog.askstring("Add Observation", "Add Observation:")
 
@@ -458,9 +339,33 @@ class MainWindow:
             self.observations.append(new_observation)   
         
         self.sam_model.reset_predictor_state()
-        self.__create_observation_widgets()
+        self.create_first_row_widgets()
+        self.create_second_row_widgets()
 
 
+    def add_overlay_to_frames(self):
+        """This function takes the data from the json and saves them in every frame image_view instance"""
+        json_data = self.json_read_write.get_json()
+
+        for image_view in self.frames:
+            frame_num = image_view.get_frame_num()
+            frame_data = json_data.get(str(int(frame_num)))
+
+            if frame_data == None:
+                continue
+            
+            image_view.set_data(frame_data["Observations"])
+            if frame_num in self.marked_frames:
+                image_view.set_border(self.selected_observation, "Marked", True)
+
+            for observation, list in self.split_intervals.items():
+                for start, end in list:
+                    if start == frame_num:
+                        image_view.set_border(observation, "Border Left", True)
+                    elif end == frame_num:
+                        image_view.set_border(observation, "Border Right", True)
+
+        self.draw_overlays_on_image_views()
 
 
     def on_image_left_click(self, event):
@@ -492,64 +397,64 @@ class MainWindow:
         
         
         if self.left_click_modes.get("Marking Up"):
-            if self.image_infos[img_index].get_border_value("Marked") == False:
-                self.marked_frames.append(self.image_infos[img_index].get_frame_num())
-                self.image_infos[img_index].draw_border(side="top", color="red_full")
-                self.image_infos[img_index].set_border(self.selected_observation, "Marked", True)
+            if self.frames[img_index].get_border_value("Marked") == False:
+                self.marked_frames.append(self.frames[img_index].get_frame_num())
+                self.frames[img_index].draw_border(side="top", color="red_full")
+                self.frames[img_index].set_border(self.selected_observation, "Marked", True)
 
-            elif self.image_infos[img_index].get_border_value("Marked") == True:
-                self.marked_frames.remove(self.image_infos[img_index].get_frame_num())
+            elif self.frames[img_index].get_border_value("Marked") == True:
+                self.marked_frames.remove(self.frames[img_index].get_frame_num())
                 print(self.marked_frames)
-                self.image_infos[img_index].set_border(self.selected_observation, "Marked", False)
-                self.image_infos[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
+                self.frames[img_index].set_border(self.selected_observation, "Marked", False)
+                self.frames[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
 
 
         elif self.left_click_modes.get("Splitting"):
             # Check that current split is not inside other split
             if self.selected_observation in self.split_intervals:
                 for start, end in self.split_intervals[self.selected_observation]:
-                    if start <= self.image_infos[img_index].get_frame_num() <= end:
+                    if start <= self.frames[img_index].get_frame_num() <= end:
 
                         if self.split_start:
-                            self.image_infos[self.split_start].set_border(self.selected_observation, "Border Left", False)
+                            self.frames[self.split_start].set_border(self.selected_observation, "Border Left", False)
 
                         self.reset_left_click_modes()
                         return
 
             if self.split_start is None:
                 self.split_start = img_index
-                self.image_infos[img_index].set_border(self.selected_observation, "Border Left", True)
-                self.image_infos[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
+                self.frames[img_index].set_border(self.selected_observation, "Border Left", True)
+                self.frames[img_index].draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
                 
                 
             elif self.split_end is None:
                 if img_index >= self.split_start:
                     self.split_end = img_index
-                    self.image_infos[img_index].set_border(self.selected_observation, "Border Right", True)
+                    self.frames[img_index].set_border(self.selected_observation, "Border Right", True)
                     
                     intervall_list = self.split_intervals.get(self.selected_observation, [])
-                    intervall_list.append((self.image_infos[self.split_start].get_frame_num(), self.image_infos[self.split_end].get_frame_num()))
+                    intervall_list.append((self.frames[self.split_start].get_frame_num(), self.frames[self.split_end].get_frame_num()))
                     self.split_intervals[self.selected_observation] = intervall_list
                     
                 
                 else:
-                    self.image_infos[self.split_start].set_border(self.selected_observation, "Border Left", False)
+                    self.frames[self.split_start].set_border(self.selected_observation, "Border Left", False)
 
                 self.reset_left_click_modes(event)
 
         elif self.left_click_modes.get("Delete Split"):
-            frame_num = self.image_infos[img_index].get_frame_num()
+            frame_num = self.frames[img_index].get_frame_num()
             intervals_for_observation = self.split_intervals.get(self.selected_observation, [])
             for start, end in intervals_for_observation:
                 if start <= frame_num <= end:
 
-                    start_index = self.image_infos.index(next((f for f in self.image_infos if f.get_frame_num() == start), None))
-                    end_index = self.image_infos.index(next((f for f in self.image_infos if f.get_frame_num() == end), None))
+                    start_index = self.frames.index(next((f for f in self.frames if f.get_frame_num() == start), None))
+                    end_index = self.frames.index(next((f for f in self.frames if f.get_frame_num() == end), None))
                     print(f"to delete start: {start}, end: {end}")
                     self.split_intervals[self.selected_observation].remove((start, end))
 
                     for i in range(start_index, end_index + 1):
-                        img_view = self.image_infos[i]
+                        img_view = self.frames[i]
 
                         img_view.set_border(self.selected_observation, "Border Left", False)
                         img_view.set_border(self.selected_observation, "Border Right", False)
@@ -559,23 +464,23 @@ class MainWindow:
                     break
 
         elif self.left_click_modes.get("Deleting"):
-            img_view = self.image_infos[img_index]
+            img_view = self.frames[img_index]
             img_view.pop_observation(self.selected_observation)
             print(f"Popped {self.selected_observation} from frame {img_view.get_frame_num()}")
             img_view.draw(self.button_states, self.split_intervals.get(self.selected_observation, []))
         else:
             intervall_list = self.split_intervals.get(self.selected_observation, [])
             if len(intervall_list) == 0:
-                intervall_list.append((self.image_infos[0].get_frame_num(), self.image_infos[-1].get_frame_num()))
+                intervall_list.append((self.frames[0].get_frame_num(), self.frames[-1].get_frame_num()))
                 self.split_intervals[self.selected_observation] = intervall_list
 
-                self.image_infos[0].set_border(self.selected_observation, "Border Left", True)
-                self.image_infos[-1].set_border(self.selected_observation, "Border Right", True)
-                self.draw_overlays()
+                self.frames[0].set_border(self.selected_observation, "Border Left", True)
+                self.frames[-1].set_border(self.selected_observation, "Border Right", True)
+                self.draw_overlays_on_image_views()
                 
 
             for start, end in self.split_intervals[self.selected_observation]:
-                if start <= self.image_infos[img_index].get_frame_num() <= end:
+                if start <= self.frames[img_index].get_frame_num() <= end:
                     clicked_intervall = (start, end)
             
             try:
@@ -595,7 +500,7 @@ class MainWindow:
 
             self.last_clicked_intervall = clicked_intervall
 
-        self.draw_overlays()
+        self.draw_overlays_on_image_views()
         
     def on_scroll(self, event):
         # Check if the Ctrl key is held down during the scroll
@@ -608,11 +513,35 @@ class MainWindow:
             else:
                 if self.grid_size > 1:
                     self.grid_size -= 1
-            self.__create_image_grid()
+            self.create_image_grid()
 
     def on_mousewheel(self, event):
         # Enable mousewheel scrolling
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def on_annotation_window_close(self):
+        # save settings
+        points, polygons = self.annotation_window.get_points_and_labels()
+
+        if len(points.get("1", [])) == 0 and len(points.get("0", [])) == 0:
+            self.sam_model.reset_predictor_state()
+
+        else:
+            self.annotation_window_geometry_data["Maximized"], self.annotation_window_geometry_data["Geometry"] = self.annotation_window.get_geometry()
+            index = self.annotation_window.get_index()
+
+            observation_data = {
+                "Mask Polygon": polygons,
+                "Points": points
+            }
+
+            self.frames[index].add_to_data(self.selected_observation, observation_data)
+            self.draw_overlays_on_image_views()
+        
+        # Clean up any resources or state related to the AnnotationWindow
+        self.annotation_window.annotation_window.destroy()
+        self.annotation_window = None
+        print("Annotation Window closed")
         
     def on_observation_button_pressed(self, observation):
         if observation not in self.button_states:
@@ -628,7 +557,7 @@ class MainWindow:
         self.selected_observation = observation
         self.sam_model.reset_predictor_state()
         self.reset_left_click_modes()
-        self.draw_overlays()
+        self.draw_overlays_on_image_views()
 
     def on_visibility_button_pressed(self, observation):
         visible = self.button_states[observation]["Visible"]
@@ -640,14 +569,14 @@ class MainWindow:
             self.button_states[observation]["Visible"] = False
             self.button_states[observation]["Visibility Button"].config(relief="raised", bg="lightgrey")
         
-        self.draw_overlays()
+        self.draw_overlays_on_image_views()
 
     def on_extract_frames(self, time, reverse=False):
         self.frame_extraction.extract_further(extra_seconds_to_extract=abs(time), reverse=reverse)
 
         self.reinit_frames()
         self.reinit_sam()
-        self.draw_overlays()
+        self.draw_overlays_on_image_views()
 
     def open_extraction_window(self):
         start_frame, end_frame = self.frame_extraction.extract_from_video_player()
@@ -666,10 +595,10 @@ class MainWindow:
 
             self.reinit_frames()
             self.reinit_sam()
-            self.draw_overlays()
+            self.draw_overlays_on_image_views()
                     
     def open_annotation_window(self, index):
-        image = self.image_infos[index]
+        img_view = self.frames[index]
 
         img_view.reset_drawn_image()
         data = img_view.get_data()
@@ -686,7 +615,9 @@ class MainWindow:
         self.annotation_window.init_window(self.annotation_window_geometry_data)
         self.annotation_window.init_sam(index, self.observations.index(self.selected_observation), self.sam_model)
 
-
+        # Bind the window close event to a custom method
+        self.annotation_window.annotation_window.protocol("WM_DELETE_WINDOW", self.on_annotation_window_close)
+        self.annotation_window.annotation_window.mainloop()
 
     def set_left_click_mode(self, mode):
         """Sets the internal dict for tracking based on the currently active mode"""
@@ -708,19 +639,61 @@ class MainWindow:
         self.first_frame.config(background="lightgrey")
         self.second_frame.config(background="lightgrey")
     
+    def draw_overlays_on_image_views(self):
+        """
+        for every image: Draws their masks and Borders on the shown image.
+        """
+        try:
+            intervals = self.split_intervals.get(self.selected_observation, [])
+            for image_view in self.frames:
+                image_view.draw(self.button_states, intervals)
+            
+            self.root.after(200, self.create_image_grid)
+        except: pass
 
+    def create_image_grid(self):
+        """
+        Puts the Images on the Grid.
+        """
+        self.image_references = []
 
+        orig_width, orig_height = self.frames[0].get_image_size()
+        ratio = orig_height/orig_width
 
+        canvas_width = self.canvas.winfo_width()
+        cell_width = max((canvas_width - self.grid_size*9)//self.grid_size, 1)
+
+        # Clear the scrollable_frame before adding new labels
+        for widget in self.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        for i, img_view in enumerate(self.frames):
+            image = img_view.get_drawn_image()
+            try:
+                image = image.resize((cell_width, int(cell_width*ratio)), Image.Resampling.LANCZOS)
+            except:
+                return
+            photo = ImageTk.PhotoImage(image)
+
+            # Store the reference to the image
+            self.image_references.append(photo)
+
+            label = tk.Label(self.scrollable_frame, image=photo)
+            label.grid(row=i // self.grid_size, column=i % self.grid_size, padx=2, pady=2, sticky="nsew")
+            label.bind("<Button-1>", self.on_image_left_click)  # Bind click event
+            label.bind("<Button-3>", lambda event: self.set_left_click_mode("Splitting"))
+
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
             
     def prompt_grid_size(self):
         # Prompt the user to input new grid dimensions
         grid_size = simpledialog.askinteger("Grid Size", "Enter Grid Size:", minvalue=1, maxvalue=10)
         if grid_size:
             self.grid_size = grid_size
-            self.__create_image_grid()
+            self.create_image_grid()
 
     def resize_images(self, event=None):
-        self.__create_image_grid()
+        self.create_image_grid()
 
     def reinit_sam(self):
         self.sam_model.init_predictor_state()
@@ -729,7 +702,7 @@ class MainWindow:
         # Get Current Frame list:
         frame_name_list = []
         new_frames = []
-        for img_view in self.image_infos:
+        for img_view in self.frames:
             frame_name = img_view.get_image_name()
             frame_name_list.append(frame_name)
 
@@ -737,14 +710,14 @@ class MainWindow:
             if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
                 image_view = None
                 if file in frame_name_list:
-                    image_view = self.image_infos[frame_name_list.index(file)]
+                    image_view = self.frames[frame_name_list.index(file)]
                 else:
                     file_path = os.path.join(self.frame_dir, file)
                     image_view = ImageView(file_path)
 
                 new_frames.append(image_view)
 
-        self.image_infos = new_frames
+        self.frames = new_frames
 
     def track_object_in_video(self):
         """Tracks Objects based on their given Points in their intervalls"""
@@ -763,8 +736,8 @@ class MainWindow:
             for start, end in self.split_intervals[self.selected_observation]:
                 print(f"\nTracking Object {self.selected_observation} form frame {start} to frame {end}!")
                 # Get Index first:
-                start_index = next((self.image_infos.index(f) for f in self.image_infos if f.get_frame_num() == start), None)
-                end_index = next((self.image_infos.index(f) for f in self.image_infos if f.get_frame_num() == end), None)
+                start_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == start), None)
+                end_index = next((self.frames.index(f) for f in self.frames if f.get_frame_num() == end), None)
 
                 # Check if start_index and end_index are valid
                 if start_index is None or end_index is None:
@@ -773,7 +746,7 @@ class MainWindow:
 
                 # Call propagate_through_interval for each interval and accumulate results
                 video_segments = self.sam_model.propagate_through_interval(
-                    self.image_infos, self.button_states, start_index, end_index
+                    self.frames, self.button_states, start_index, end_index
                 )
                 if video_segments:
                     all_video_segments.update(video_segments)  # Merge results
@@ -783,7 +756,7 @@ class MainWindow:
         
         # Process each frame in all_video_segments
         for out_frame_idx, masks in all_video_segments.items():
-            img_view = self.image_infos[out_frame_idx]
+            img_view = self.frames[out_frame_idx]
             polygons = []
             for mask in masks.values():
                 polygon = img_view.draw_and_convert_masks(mask, self.button_states[self.selected_observation]["Color"])
@@ -793,12 +766,12 @@ class MainWindow:
                 polygons = polygons[0]
             img_view.add_to_observation(self.selected_observation, "Mask Polygon", polygons)
 
-        self.draw_overlays()
+        self.draw_overlays_on_image_views()
 
 
     def save_to_json(self):
         """Saves the mask and point date saved in every frame to the json"""
-        for img_view in self.image_infos:
+        for img_view in self.frames:
             data = img_view.get_data()
             for observation, observation_data in data.items():
                 self.json_read_write.add_to_frame(frame_name=img_view.get_image_name(),
@@ -824,9 +797,9 @@ class MainWindow:
 
 
     def remove_image_view(self):
-        for frame in self.image_infos:
+        for frame in self.frames:
             frame.close_image_view()
-        self.image_infos = None
+        self.frames = None
 
     def close_window(self, skip=False):
         """When Next or Skip is clicked, the next_callback function is called to ensure the next video is loaded"""
