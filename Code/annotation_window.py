@@ -76,16 +76,16 @@ class AnnotationWindow:
         
         self.image_info = image_info
 
-        for i, damage_info in enumerate(self.image_info.values()):
+        for i, damage_info in enumerate(self.image_info.data_coordinates):
             if damage_info.is_selected == True:
                 self.object_class_id = i
                 self.color = self.__get_color(color_index=i)
 
                 self.is_set["Image Info"] = True
-                break
+                return
         
         print("Error: Selected Damage couldnt be found!")
-        print("Using Orbitrary Value: 0")
+        print("Using arbitrary Value: 0")
         self.object_class_id = 0
         self.color = self.__get_color(color_index=0)
 
@@ -95,9 +95,6 @@ class AnnotationWindow:
             sam_model: Loaded SAM2 Model
             frame_index: Index in relation to loaded Images, !not frame number!
         """
-        if self.is_set["Image Info"] == False:
-            print("Error: Set Image Info before the Segmenter!")
-            return
         
         if sam_model is None:
             print("Error: SAM2 is None!")
@@ -114,13 +111,10 @@ class AnnotationWindow:
     def open(self):
         self.__create_window()
         self.__draw_image_on_canvas()
-
-        # Bind the window close event to a custom method
         self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
+        print("Entering mainloop")
         self.annotation_window.mainloop()
-
-        print("Passed Mainloop")
-
+        print("Exited mainloop")
 
     def __create_window(self):
         self.annotation_window = tk.Toplevel()
@@ -155,22 +149,18 @@ class AnnotationWindow:
         self.__draw_image_on_canvas()
 
     def __on_close(self):
-        # This function is called when the annotation window is closed
+        # Prepare geometry data
         if self.annotation_window.state() == "zoomed":
             self.is_maximized = True
         self.geometry_data = self.annotation_window.geometry()
 
         if len(self.points.get("1", [])) == 0 and len(self.points.get("0", [])) == 0:
             self.sam_model.reset_predictor_state()
-
-        else:
-            self.annotation_window_geometry_data["Maximized"], self.annotation_window_geometry_data["Geometry"] = self.annotation_window.get_geometry()
-            index = self.annotation_window.get_index()
-
-
-        # Clean up any resources or state related to the AnnotationWindow
-        self.annotation_window.destroy()
-        print("Annotation Window closed")
+        
+        if self.annotation_window:
+            self.annotation_window.quit()  # Ends the mainloop
+            self.annotation_window.destroy()  # Destroys the window
+            print("Annotation Window closed")
 
     def __on_click(self, event):
         # Get the coordinates of the click
@@ -191,9 +181,10 @@ class AnnotationWindow:
         elif event.num == 3:  # Right click
             self.points["0"].append([image_x, image_y])
             self.order_of_addition.append(0)
-
-
         self.__create_segmented_image()
+
+        self.__draw_image_on_canvas()
+
 
     def __on_key_press(self, event):
         # Remove last added Point
@@ -236,38 +227,21 @@ class AnnotationWindow:
             return
         
         self.polygons = self.__segment_image()  # Get the mask from your existing propagate method
-
-
-        if self.selected_damage is None:
-            print("No selected Damage")
-            return
         
         self.image_info.data_coordinates[self.object_class_id].positive_point_coordinates = self.points.get("1")
         self.image_info.data_coordinates[self.object_class_id].negative_point_coordinates = self.points.get("0")
         self.image_info.data_coordinates[self.object_class_id].mask_polygon = self.polygons
-
-        DrawImageInfo.draw(self.image_info)
+        DrawImageInfo(self.image_info)  
         self.__draw_image_on_canvas()
 
     def __segment_image(self):
         # Prepare the structure and then send to sam
 
-        points = []
-        labels = []
+        self.image_info.data_coordinates[self.object_class_id].mask_polygon = self.polygons
+        self.image_info.data_coordinates[self.object_class_id].positive_point_coordinates = self.points["1"]
+        self.image_info.data_coordinates[self.object_class_id].negative_point_coordinates = self.points["0"]
 
-        for key, value in self.points.items():
-            for point in value:
-                points.append(point)
-                labels.append(key)
-
-
-        points_labels_and_frame_index = {
-            "Points" : points,
-            "Labels" : labels,
-            "Image Index" : self.frame_index
-        }
-
-        mask = self.sam_model.add_point(points_labels_and_frame_index, self.object_class_id)
+        mask = self.sam_model.add_points(self.image_info)
 
         if len(mask) == 0:
             print("Error: Mask length == 0")

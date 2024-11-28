@@ -3,35 +3,35 @@ from image_info import ImageInfo
 
 class DrawImageInfo:
     """
-    This class draws the overlays and masks saved in image info onto its saved image.
+    This class draws masks, points and borders.
     """
-    def draw(self, image_info: ImageInfo):
+    def __init__(self, image_info: ImageInfo):
         try:
             image_info.reset_drawn_image()
-            for damage_info in image_info.data_coordinates:
-                if not damage_info.is_shown or not damage_info.is_in_intervall:
-                    continue
+            self.__drawn_image = image_info.drawn_image
+            for color_index, damage_info in enumerate(image_info.data_coordinates):
 
-                color_index = image_info.data_coordinates.index(damage_info)
-                self.__draw_polygon(damage_info.mask_polygon, image_info.drawn_image, color_index)
-
-                if not damage_info.is_selected:
-                    continue
-
-                self.__draw_points(damage_info.positive_point_coordinates, damage_info.negative_point_coordinates, image_info.drawn_image)
-                if damage_info.is_start_of_intervall:
-                    self.__draw_border(image_info.drawn_image, "left", num_of_intervall=color_index)
-                if damage_info.is_end_of_intervall:
-                    self.__draw_border(image_info.drawn_image, "right", num_of_intervall=color_index)
+                if damage_info.is_shown:
+                    self.__draw_polygon(damage_info.mask_polygon, color_index)
+            
+                if damage_info.is_selected:
+                    if damage_info.is_start_of_intervall:
+                        self.__draw_border("left", num_of_intervall=color_index)
+                    if damage_info.is_end_of_intervall:
+                        self.__draw_border("right", num_of_intervall=color_index)
+                    
+                    self.__draw_points(damage_info.positive_point_coordinates, damage_info.negative_point_coordinates)
 
             if image_info.is_marked:
-                self.__draw_border(image_info.drawn_image, "top", "red_full")
+                self.__draw_border("top", "red_full")
 
+            image_info.drawn_image = self.__drawn_image
         except Exception as e:
             print(f"Error in drawing: {e}")
 
-    def __draw_points(self, pos_points, neg_points, drawn_image, radius=5):
-        overlay = Image.new("RGBA", drawn_image.size, (0, 0, 0, 0))
+    def __draw_points(self, pos_points, neg_points, radius=5):
+        base_img = self.__drawn_image
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay)
 
         for point in pos_points:
@@ -42,11 +42,16 @@ class DrawImageInfo:
             x, y = point
             overlay_draw.ellipse((x - radius, y - radius, x + radius, y + radius), fill=self.__get_color("red_full"))
 
-        drawn_image.paste(Image.alpha_composite(drawn_image.convert("RGBA"), overlay))
+        base_img = base_img.convert("RGBA")
+        base_img = Image.alpha_composite(base_img, overlay)
+        self.__drawn_image = base_img
 
-    def __draw_polygon(self, polygons, drawn_image, color_index=0):
+    def __draw_polygon(self, polygons, color_index=0):
         color = self.__get_color(color_index=color_index)
-        overlay = Image.new("RGBA", drawn_image.size, (0, 0, 0, 0))
+
+        base_img = self.__drawn_image
+
+        overlay = Image.new("RGBA", base_img.size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay, "RGBA")
 
         if polygons:
@@ -55,11 +60,16 @@ class DrawImageInfo:
                 if len(polygon_tuples) > 3:
                     overlay_draw.polygon(polygon_tuples, outline=color[:3], fill=color)
 
-        drawn_image.paste(Image.alpha_composite(drawn_image.convert("RGBA"), overlay))
+        base_img = base_img.convert("RGBA")
+        base_img = Image.alpha_composite(base_img, overlay)
+        self.__drawn_image = base_img
 
-    def __draw_border(self, base_img, side="all", color=None, num_of_intervall=0, thickness=20):
+    def __draw_border(self, side="all", color=None, num_of_intervall=0, thickness=20):
         if color is None:
             color = self.__get_split_color(num_of_intervall)
+
+        base_img = self.__drawn_image
+
         img_width, img_height = base_img.size
         thickness = min(thickness, img_width, img_height)
 
@@ -82,7 +92,9 @@ class DrawImageInfo:
         for rect in borders.get(side, []):
             overlay_draw.rectangle(rect, fill=color)
 
-        base_img.paste(Image.alpha_composite(base_img.convert("RGBA"), overlay))
+        base_img = base_img.convert("RGBA")
+        base_img = Image.alpha_composite(base_img, overlay)
+        self.__drawn_image = base_img
 
     def __get_color(self, color=None, color_index=None) -> tuple:
         color_map = {

@@ -16,7 +16,7 @@ class ImageInfo:
     image_index: int = field(init=False, default=None)
     image: Optional[Image.Image] = field(init=False, default=None)
     drawn_image: Optional[Image.Image] = field(init=False, default=None)
-    is_marked: bool = field(init=False, default=None)
+    is_marked: bool = field(init=False, default=False)
     data_coordinates: list[DamageInfo] = field(default_factory=list)
     
 

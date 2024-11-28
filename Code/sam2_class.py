@@ -3,6 +3,7 @@ from sam2.build_sam import build_sam2_video_predictor # type: ignore
 import numpy as np
 import gc
 from image_info import ImageInfo
+
 class Sam2Class:
     """
     This Class manages the interaction with SAM2.
@@ -20,22 +21,7 @@ class Sam2Class:
 
         if not self.initialized:
             raise Exception("Error: Segmentation Model couldnt be loaded!")
-
-
-    # Better make a private functions all call them in here:
-    def __setup_torch():
-        torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
-        if torch.cuda.get_device_properties(0).major >= 8:
-            torch.backends.cuda.matmul.allow_tf32 = True
-            torch.backends.cudnn.allow_tf32 = True
-    
-    def __load_model(self, checkpoint_filepath: str, model_filepath: str) -> bool:
-        # check if both paths are not empty and exist, else print error and return False
-        self.predictor = build_sam2_video_predictor(checkpoint_filepath, model_filepath)
-        return True
-
-
-
+        
     def load(self, frame_dir=None):
         """
             Initialize SAM2:
@@ -50,19 +36,8 @@ class Sam2Class:
         
         elif frame_dir:
             self.frame_dir = frame_dir
-            
+
         self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
-
-
-
-
-    def __reset_predictor_state(self):
-        """
-            Resets the predictors state:
-                After Tracking has started, it is not possible to add new or other Objects to SAM.
-                So the predictor must be reset to either add or remove Objects.
-        """
-        self.predictor.reset_state(self.inference_state)
 
     def add_points(self, image_info: ImageInfo):
         """
@@ -110,115 +85,48 @@ class Sam2Class:
 
         if obj_id != selected_object_id:
             print("Error: Class object IDs are not the same!")
-        
+
         return mask
     
     def track_objects(self, frame_infos: list, start_frame_index: int, end_frame_index: int) -> dict:
+        """
+        This goes through the list of all frames from start_frame_index to end_frame_index,
+        and first inputs all Points that were found in that intervall and second starts tracking for the selected object.
+        Args:
+            frame_infos (list): List of ImageInfo instances
+            start_frame_index (int): First frame to consider in tracking
+            end_frame_index (int): Last frame to consider in tracking
+        Returns:
+            dict: keys are frame indices, values are the masks
+        """
+                
         if not self.initialized:
             print("Error: SAM not Initialized!")
             return
         
         # Reset SAM and add points from the middle frame
-        self.__reset_predictor_state()
+        self.reset_predictor_state()
         
         print(f"Tracking from Frame {start_frame_index} to {end_frame_index}")
-        object_class_id = 0
-        selected_observation = None
 
-        for observation, button in button_states.items():
-            if button.get("Selected") == True:
-                selected_observation = observation
-                break
-            else:
-                object_class_id += 1
+        frame_indexes_with_points = self.__get_frame_infos_with_points_from_intervall(frame_infos, start_frame_index, end_frame_index)
 
-        print(f"Tracking Object {selected_observation}, with id {object_class_id}")
-
-        new_frame_list = []
-        frames_with_points = []
-
-        # Collect frames within the interval and check for points on the selected observation
-        for frame_index in range(start, end+1):
-            img_view = frames[frame_index]
-
-            new_frame_list.append(img_view)
-            data = img_view.get_data()
-
-            if not data.get(selected_observation):
-                continue
-
-            # Check if there are positive or negative points for this observation
-            if "Points" not in data[selected_observation]:
-                continue
-
-            pos = data[selected_observation]["Points"].get("1")
-            neg = data[selected_observation]["Points"].get("0")
-
-            if pos or neg:
-                frames_with_points.append(frame_index)
-
-
-        if frames_with_points == []:
-            print("No frames with points found in the specified interval.")
-            return
-
-        first_index = frames_with_points[0]
+        starting_point_index = frame_indexes_with_points[0]
 
         # Add all points
-        for index in frames_with_points:
-            frame_data = frames[index].get_data()[selected_observation]
-            points = []
-            labels = []
-
-            # Add points for key "1" if it exists
-            if "1" in frame_data["Points"]:
-                points += frame_data["Points"]["1"]
-                labels += [1] * len(frame_data["Points"]["1"])
-
-            # Add points for key "0" if it exists
-            if "0" in frame_data["Points"]:
-                points += frame_data["Points"]["0"]
-                labels += [0] * len(frame_data["Points"]["0"])
-
-            self.add_point(
-                {"Points": points, "Labels": labels, "Image Index": index},
-                object_class_id=object_class_id
-            )
+        for index in frame_indexes_with_points:
+            self.add_points(frame_infos[index])
 
         # Calculate max_frame_num_to_track based on interval limits
-        
-        max_frame_num_to_track_forwards = end - first_index
-        max_frame_num_to_track_backwards = first_index - start
+        max_frame_num_to_track_forwards = end_frame_index - starting_point_index
+        max_frame_num_to_track_backwards = starting_point_index - start_frame_index
 
-        # Track forward and backward from the middle frame within the interval
-        video_segments = dict()
-        
-        # Forward tracking from the middle frame
-        for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
-                                                                                             start_frame_idx=first_index, 
-                                                                                             max_frame_num_to_track=max_frame_num_to_track_forwards):
-            video_segments[out_frame_idx] = {
-                out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
-                for i, out_obj_id in enumerate(out_obj_ids)
-            }
-
-        if first_index != start:
-            # Backward tracking within the interval
-            for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, 
-                                                                                                 start_frame_idx=first_index, 
-                                                                                                 max_frame_num_to_track=max_frame_num_to_track_backwards, 
-                                                                                                 reverse=True):
-                if out_frame_idx not in video_segments:
-                    video_segments[out_frame_idx] = {}
-                for i, out_obj_id in enumerate(out_obj_ids):
-                    if out_obj_id not in video_segments[out_frame_idx]:
-                        video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
-
-        return video_segments
+        return self.__track(starting_point_index, max_frame_num_to_track_forwards, max_frame_num_to_track_backwards)
 
 
-    def cleanup(self):
+    def __del__(self):
         """
+        Ensure cleanup is performed when the object is destroyed.
         Clean up GPU resources by deleting the predictor and clearing CUDA cache.
         """
         try:
@@ -235,8 +143,87 @@ class Sam2Class:
         except Exception as e:
             print(f"Error during cleanup: {e}")
 
-    def __del__(self):
+
+    # Better make a private functions all call them in here:
+    def __setup_torch(self):
+        torch.autocast(device_type="cuda", dtype=torch.bfloat16).__enter__()
+        if torch.cuda.get_device_properties(0).major >= 8:
+            torch.backends.cuda.matmul.allow_tf32 = True
+            torch.backends.cudnn.allow_tf32 = True
+    
+    def __load_model(self, checkpoint_filepath: str, model_filepath: str) -> bool:
+        # check if both paths are not empty and exist, else print error and return False
+        self.predictor = build_sam2_video_predictor(model_filepath, checkpoint_filepath, )
+        return True
+
+    def reset_predictor_state(self):
         """
-        Ensure cleanup is performed when the object is destroyed.
+            Resets the predictors state:
+                After Tracking has started, it is not possible to add new or other Objects to SAM.
+                So the predictor must be reset to either add or remove Objects.
         """
-        self.cleanup()
+        self.predictor.reset_state(self.inference_state)
+
+
+
+    def __track(self, starting_point_index: int, max_frame_num_to_track_forwards: int, max_frame_num_to_track_backwards: int) -> dict:
+        # Track forward and backward from the middle frame within the interval
+        video_segments = dict()
+        
+        if max_frame_num_to_track_forwards > 0:
+            # Forward tracking from the middle frame
+            for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, start_frame_idx=starting_point_index, max_frame_num_to_track=max_frame_num_to_track_forwards):
+                video_segments[out_frame_idx] = {
+                    out_obj_id: (out_mask_logits[i] > 0.0).cpu().numpy()
+                    for i, out_obj_id in enumerate(out_obj_ids)
+                }
+
+        if max_frame_num_to_track_backwards > 0:
+            # Backward tracking within the interval
+            for out_frame_idx, out_obj_ids, out_mask_logits in self.predictor.propagate_in_video(self.inference_state, start_frame_idx=starting_point_index, max_frame_num_to_track=max_frame_num_to_track_backwards, reverse=True):
+                if out_frame_idx not in video_segments:
+                    video_segments[out_frame_idx] = {}
+                for i, out_obj_id in enumerate(out_obj_ids):
+                    if out_obj_id not in video_segments[out_frame_idx]:
+                        video_segments[out_frame_idx][out_obj_id] = (out_mask_logits[i] > 0.0).cpu().numpy()
+
+        return video_segments
+
+
+    def __get_frame_infos_with_points_from_intervall(self, frame_infos: list, start_frame_index: int, end_frame_index: int) -> list[int]:
+        """
+        This goes through the list of all frames and saves the indexes of frames, in which points are saved.
+        Args:
+            frame_infos (list): List of ImageInfo instances
+            start_frame_index (int): First frame to consider in tracking
+            end_frame_index (int): Last frame to consider in tracking
+        Returns:
+            list[int]: List of frame indexes where the selected observation contains points. 
+                    Returns an empty list if no such frames are found.
+        """
+        frames_with_points = []
+
+        image_info = frame_infos[0]
+        for i, damage_info in enumerate(image_info.data_coordinates):
+            if damage_info.is_selected == True:
+                selected_observation = damage_info.damage_name
+                damage_index = i
+
+        print(f"Object to track: {selected_observation}")
+
+        # Collect frames within the interval and check for points on the selected observation
+        for frame_index in range(start_frame_index, end_frame_index+1):
+            image_info = frame_infos[frame_index]
+
+            damage_info = image_info.data_coordinates[damage_index]
+
+            positive_points = damage_info.positive_point_coordinates
+            negative_points = damage_info.negative_point_coordinates
+
+            if len(positive_points) > 0 or len(negative_points) > 0:
+                frames_with_points.append(frame_index)
+
+        if frames_with_points == []:
+            print("No frames with points found in the specified interval.")
+
+        return frames_with_points
