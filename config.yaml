@@ -12,25 +12,27 @@ mode: list_mode
 # Use the whole paths. The checkpoint is the file you have to download yourself the model config is in your downloaded sam2 repo.
 # !You have to match the Model sizes.
 sam_model_paths:
-  sam2_checkpoint : C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt
-  model_cfg : C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
+  sam2_checkpoint: C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt
+  model_cfg: C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
 
 
 # These are the list mode paths
 default_paths:
-  output_path : C:\Users\K3000\Desktop\Label Data
-  table_path : C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
+  output_path: C:\Users\K3000\Desktop\Label Data
+  table_path: C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
 
 settings:
-  default_grid_size : 0   # If set to 0: default to loading maximum if set to any other number set grid to that size
-  window_width : 0     # only if window_maximized = False
-  window_height : 0    # only if window_maximized = False
+  default_grid_size: 0   # If set to 0: default to loading maximum if set to any other number set grid to that size
+  window_width: 0     # only if window_maximized = False
+  window_height: 0    # only if window_maximized = False
 
   # How many second before and after the damage to extract
-  frame_extraction_puffer_before : 60
-  frame_extraction_puffer_after : 10
-  image_similarity_threshold : 0.8  # Threshold how similar frames can be when taking them from the video
-  extraction_frame_per_frames : 25  # In what rate a frame shall be extracted
+  frame_extraction_puffer_before: 60
+  frame_extraction_puffer_after: 10
+  image_similarity_threshold: 0.8  # Threshold how similar frames can be when taking them from the video
+  extraction_frame_per_frames: 25  # In what rate a frame shall be extracted
+
+  auto_deinterlacing: False
 
 # Every element of this list will become a seperate Button for quickly adding new classes
 object_add_buttons:
@@ -41,8 +43,8 @@ object_add_buttons:
 
 #### Here are all the presets for the test mode ####
 test_mode_setup:
-  current_frame_dir : labeling_project\test folder\source images
-  video_path : labeling_project\test folder\test.mp4
+  current_frame_dir: labeling_project\test folder\source images
+  video_path: labeling_project\test folder\test.mp4
 
 
 test_mode_table:

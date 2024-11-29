@@ -112,9 +112,7 @@ class AnnotationWindow:
         self.__create_window()
         self.__draw_image_on_canvas()
         self.annotation_window.protocol("WM_DELETE_WINDOW", self.__on_close)
-        print("Entering mainloop")
         self.annotation_window.mainloop()
-        print("Exited mainloop")
 
     def __create_window(self):
         self.annotation_window = tk.Toplevel()
@@ -160,7 +158,6 @@ class AnnotationWindow:
         if self.annotation_window:
             self.annotation_window.quit()  # Ends the mainloop
             self.annotation_window.destroy()  # Destroys the window
-            print("Annotation Window closed")
 
     def __on_click(self, event):
         # Get the coordinates of the click

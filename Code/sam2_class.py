@@ -111,6 +111,9 @@ class Sam2Class:
 
         frame_indexes_with_points = self.__get_frame_infos_with_points_from_intervall(frame_infos, start_frame_index, end_frame_index)
 
+        if len(frame_indexes_with_points) < 1:
+            return None
+
         starting_point_index = frame_indexes_with_points[0]
 
         # Add all points
@@ -122,9 +125,17 @@ class Sam2Class:
         max_frame_num_to_track_backwards = starting_point_index - start_frame_index
 
         return self.__track(starting_point_index, max_frame_num_to_track_forwards, max_frame_num_to_track_backwards)
+    
+    
+    def reset_predictor_state(self):
+        """
+            Resets the predictors state:
+                After Tracking has started, it is not possible to add new or other Objects to SAM.
+                So the predictor must be reset to either add or remove Objects.
+        """
+        self.predictor.reset_state(self.inference_state)
 
-
-    def __del__(self):
+    def cleanup(self):
         """
         Ensure cleanup is performed when the object is destroyed.
         Clean up GPU resources by deleting the predictor and clearing CUDA cache.
@@ -132,10 +143,7 @@ class Sam2Class:
         try:
             # Delete the predictor to release GPU memory
             self.predictor.reset_state(self.inference_state)
-
-            del self.predictor
             del self.inference_state
-
             # Clear CUDA cache
             gc.collect()
             torch.cuda.empty_cache()
@@ -143,6 +151,8 @@ class Sam2Class:
         except Exception as e:
             print(f"Error during cleanup: {e}")
 
+    def __del__(self):
+        self.cleanup()
 
     # Better make a private functions all call them in here:
     def __setup_torch(self):
@@ -155,16 +165,6 @@ class Sam2Class:
         # check if both paths are not empty and exist, else print error and return False
         self.predictor = build_sam2_video_predictor(model_filepath, checkpoint_filepath, )
         return True
-
-    def reset_predictor_state(self):
-        """
-            Resets the predictors state:
-                After Tracking has started, it is not possible to add new or other Objects to SAM.
-                So the predictor must be reset to either add or remove Objects.
-        """
-        self.predictor.reset_state(self.inference_state)
-
-
 
     def __track(self, starting_point_index: int, max_frame_num_to_track_forwards: int, max_frame_num_to_track_backwards: int) -> dict:
         # Track forward and backward from the middle frame within the interval
@@ -189,7 +189,6 @@ class Sam2Class:
 
         return video_segments
 
-
     def __get_frame_infos_with_points_from_intervall(self, frame_infos: list, start_frame_index: int, end_frame_index: int) -> list[int]:
         """
         This goes through the list of all frames and saves the indexes of frames, in which points are saved.
@@ -210,7 +209,6 @@ class Sam2Class:
                 damage_index = i
 
         print(f"Object to track: {selected_observation}")
-
         # Collect frames within the interval and check for points on the selected observation
         for frame_index in range(start_frame_index, end_frame_index+1):
             image_info = frame_infos[frame_index]

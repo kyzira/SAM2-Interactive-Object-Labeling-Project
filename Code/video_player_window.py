@@ -13,8 +13,7 @@ class VideoPlayerWindow:
     """
     def __init__(self, video_path=None, start_second = 0):
         self.root = None
-        self.root.title("Video Player")
-        
+
         # Video variables
         self.video_path = video_path
         self.video = None
@@ -27,23 +26,21 @@ class VideoPlayerWindow:
         self.start_second = start_second
 
     def open(self):
+        self.root = tk.Toplevel()
+        self.root.title("Video Player")
         self.__setup_ui()
-        
         if self.video_path:
             self.__load_video(self.video_path)
-
-        self.root = tk.Toplevel()
         self.root.mainloop()
 
     def get_result(self) -> tuple:
         """
         Returns start and end in seconds
         """
-        start = (int(self.start_frame/self.frame_rate)*self.frame_rate)
-        end = (int(self.stop_frame/self.frame_rate)*self.frame_rate)
+        start_second = int(self.start_frame/self.frame_rate)
+        end_second = int(self.stop_frame/self.frame_rate)
 
-        return start, end
-
+        return start_second, end_second
 
 
     def __setup_ui(self):
@@ -138,8 +135,6 @@ class VideoPlayerWindow:
             self.frame_rate = int(self.video.get(cv2.CAP_PROP_FPS))
             self.current_frame = 0
             self.slider.configure(to=self.total_frames-1)
-            self.stop_frame_var.set(str(self.total_frames-1))
-            self.stop_frame = self.total_frames-1
 
             self.start_frame = self.start_second * self.frame_rate
             self.first_frame_label.config(text=f"First Frame was {self.start_frame}")
@@ -201,11 +196,13 @@ class VideoPlayerWindow:
         self.frame_label.configure(text=f"Frame: {self.current_frame} / {self.total_frames-1}")
     
     def __on_extract_frames(self):
+        if self.start_frame >= self.stop_frame:
+            print("Error: Start and End not correctly set!")
+            return
         try:
-            start = int(self.start_frame_var.get())
-            stop = int(self.stop_frame_var.get())
-            self.start_frame = start
-            self.stop_frame = stop
+            self.start_frame = int(self.start_frame_var.get())
+            self.stop_frame = int(self.stop_frame_var.get())
             self.root.quit()
+            self.root.destroy()
         except ValueError:
             print("Please enter valid frame numbers")

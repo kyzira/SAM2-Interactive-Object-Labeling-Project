@@ -54,7 +54,7 @@ class FrameExtraction:
         counter_skipped = 0
         avg_similarity = 0
 
-        for frame_number in range(start_frame, end_frame, extraction_rate):
+        for frame_number in range(start_frame, end_frame+1, extraction_rate):
             cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
             ret, frame = cap.read()
 

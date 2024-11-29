@@ -18,11 +18,18 @@ class DamageInfo:
     is_selected: bool = field(init=False, default=False)
 
     def get_dict(self) -> dict:  
-        return {
-            self.damage_name:{
-                "Points": {
+
+        damage_dict = {}
+
+        if len(self.positive_point_coordinates) > 0 or len(self.negative_point_coordinates) > 0:
+            damage_dict["Points"] = {
                             "1": self.positive_point_coordinates,
                             "0": self.negative_point_coordinates
-                        },
+                        }
+        if not self.mask_polygon:
+            return
+        
+        if len(self.mask_polygon) > 0:
+            damage_dict["Mask Polygon"] = self.mask_polygon
 
-                "Mask Polygon": self.mask_polygon}}
+        return damage_dict

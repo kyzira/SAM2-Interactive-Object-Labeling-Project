@@ -2,20 +2,18 @@ from main_window import MainWindow
 from table_and_index import TableAndIndex
 from frame_extraction import FrameExtraction
 from sam2_class import Sam2Class
-import tkinter as tk
-from tkinter import filedialog
 import yaml
 import os
 from dataclasses import dataclass, field
-
-
+from tkinter import filedialog
+from deinterlace_video import DeinterlaceVideo
 @dataclass
 class Setup:
     config: dict
     frame_dir: str
     sam_model: Sam2Class
+    frame_extraction : FrameExtraction
     damage_table_row: dict = field(default_factory=dict)
-
 
 
 def load_config() -> dict:
@@ -40,34 +38,131 @@ def list_mode(config, mode):
     sam_model = Sam2Class(checkpoint_filepath=config["sam_model_paths"]["sam2_checkpoint"], model_filepath=config["sam_model_paths"]["model_cfg"])
 
     while damage_table_row:
-
         working_dir = os.path.join(table_and_index.get_output_dir(), "results", damage_table_row["Videoname"])
+        deinterlaced_video_dir = os.path.join(table_and_index.get_output_dir(), "deinterlaced videos")
         frame_dir = os.path.join(working_dir, "source images")
+        os.makedirs(deinterlaced_video_dir, exist_ok=True)
         os.makedirs(frame_dir, exist_ok=True)
 
-        frame_extraction = FrameExtraction(video_path=damage_table_row["Videopfad"], output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
+        video_path = damage_table_row["Videopfad"]
+
+        if config["settings"].get("auto_deinterlacing") == True:
+            print("Deinterlacing Video...")
+            output_path = os.path.join(deinterlaced_video_dir, os.path.basename(video_path))
+            DeinterlaceVideo(video_path, output_path)
+            video_path = output_path
+
+        frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
         start_time, end_time = calculate_time_bounds(damage_table_row["Videozeitpunkt (h:min:sec)"], config)
         frame_extraction.extract_frames_by_damage_time(start_time, end_time, config["settings"].get("extraction_frame_per_frames", 25))
         
-        setup = Setup(config, frame_dir, sam_model, damage_table_row)
+        setup = Setup(config, frame_dir, sam_model, frame_extraction, damage_table_row)
 
         main_window = MainWindow()
         main_window.setup(setup, mode)
         main_window.open()
 
-        print("the main has advanced")
+
         main_window.save_to_json()
+
+        if main_window.run_next_loop == False:
+            break
 
         damage_table_row = table_and_index.get_damage_table_row()
     
 
 def test_mode(config, mode):
-    print
+    """
+    Test mode function to simulate the behavior of the application using predefined test configurations.
+    """
+    try:
+        # Extract paths and settings from the config file
+        test_mode_setup = config.get("test_mode_setup", {})
+        test_mode_table = config.get("test_mode_table", {})
+        
+        frame_dir = test_mode_setup.get("current_frame_dir")
+        video_path = test_mode_setup.get("video_path")
+        
+        # Ensure the frame directory exists
+        os.makedirs(frame_dir, exist_ok=True)
+
+        # Initialize the FrameExtraction and extract frames
+        frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
+
+        # Set up the SAM model
+        sam_model = Sam2Class(
+            checkpoint_filepath=config["sam_model_paths"]["sam2_checkpoint"],
+            model_filepath=config["sam_model_paths"]["model_cfg"]
+        )
+        
+        # Prepare the Setup dataclass for the main window
+        damage_table_row = test_mode_table
+        setup = Setup(config=config, frame_dir=frame_dir, sam_model=sam_model, frame_extraction=frame_extraction, damage_table_row=damage_table_row)
+        
+        # Initialize and open the main window
+        main_window = MainWindow()
+        main_window.setup(setup, mode)
+        main_window.open()
+        
+        # Save to JSON after running
+        print("Test mode completed. Saving data to JSON.")
+        main_window.save_to_json()
+
+    except Exception as e:
+        print(f"Error in test_mode: {e}")
+
 
 def folder_mode(config, mode):
-    print
+    """
+    Folder mode function to loop through all datasets in a selected folder.
+    Enables evaluation buttons in the MainWindow.
+    """
+    results_dir = filedialog.askdirectory(
+    title="Select the results Directory",
+    initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+    )
+
+    # Initialize SAM model
+    sam_model = Sam2Class(
+        checkpoint_filepath=config["sam_model_paths"]["sam2_checkpoint"],
+        model_filepath=config["sam_model_paths"]["model_cfg"]
+    )
+
+    if not results_dir:
+        print("No folder selected. Exiting folder mode.")
+        return
+    
+    for folder_name in os.listdir(results_dir):
+        folder_path = os.path.join(results_dir, folder_name)
+        frame_dir = os.path.join(folder_path, "source images")
+        if not os.path.isdir(frame_dir):
+            continue
 
 
+        json_path = os.path.join(folder_path, f"{os.path.basename(folder_path)}.json")
+        
+        if not os.path.exists(frame_dir) or not os.path.exists(json_path):
+            print(f"Skipping {folder_path}: Required files (frames or JSON) not found.")
+            continue
+        
+        frame_extraction = FrameExtraction(video_path=None, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
+
+        # Prepare the Setup dataclass for the main window
+        setup = Setup(config=config, frame_dir=frame_dir, sam_model=sam_model, frame_extraction=frame_extraction, damage_table_row={})
+
+        # Initialize and open the main window
+        main_window = MainWindow()
+        main_window.setup(setup, mode)
+        main_window.open()
+
+        # Save JSON after running
+        print(f"Completed processing for {folder_path}. Saving data to JSON.")
+        main_window.save_to_json()
+
+        # If the user exits or cancels, break the loop
+        if not main_window.run_next_loop:
+            print("User exited folder mode.")
+            break
 
 
 def close_window(app):
@@ -90,9 +185,7 @@ def main():
         list_mode(config, mode)
     elif mode == "folder_mode": 
         folder_mode(config, mode)
-
     
-
 
 if __name__ == "__main__":
     main()

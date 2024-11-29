@@ -1,6 +1,6 @@
 import json
 import os
-from damage_info import DamageInfo
+from image_info import ImageInfo
 
 
 class JsonAnnotationManager:
@@ -39,6 +39,9 @@ class JsonAnnotationManager:
             print("Cannot add damage info, because no JSON file is openend")
             return False
         
+        if damage_info == {}:
+            return
+        
         observation_name_and_time = f"{damage_info['Label']}, at {damage_info['Videozeitpunkt (h:min:sec)']}"
         
         # Create a list of relevant keys from config.yaml
@@ -53,7 +56,10 @@ class JsonAnnotationManager:
         # Initialize the "Info" dictionary
         self.__json_data["Info"] = {}
         for key in damage_info.keys():
-            self.__json_data["Info"][key] = damage_info[key]
+            if not damage_info[key]:
+                 self.__json_data["Info"][key] = 0
+            else:
+                self.__json_data["Info"][key] = damage_info[key]
         self.__json_data["Info"]["Documented Observations"] = [observation_name_and_time]
         # self.save()
 
@@ -82,38 +88,24 @@ class JsonAnnotationManager:
         self.__json_data["Info"][key] = value
         self.save()
         
-    def add_to_frame(self, image_name: str, damage_info: DamageInfo):
+    def add_to_frame(self, image_info: ImageInfo):
         """
             This function adds an element to the dictionairy which will be saved as a json.
             Depending on which parameters are given the json structure will be created.
         """
-        if image_name == "" or damage_info == None:
-            print("Error: image_name or damage_info not set!")
+        if image_info is None:
+            print("Error: image_info not set!")
 
         # If that key doesnt exist yet, create it
-        frame_num = str(int(image_name.split(".")[0]))
+        frame_num = image_info.frame_num
         if frame_num not in self.__json_data.keys():
             self.__json_data[frame_num] = {
-                "File Name": image_name,
+                "File Name": image_info.image_name,
                 "Observations": {}
             }
         
-        if damage_info.damage_name not in self.__json_data[frame_num]["Observations"]:
-            self.__json_data[frame_num]["Observations"][damage_info.damage_name] = dict()
-
-        coordinates_dict = self.__json_data[frame_num]["Observations"][damage_info.damage_name]
-
-        mask_polygon = damage_info.mask_polygon
-        positive_point_coordinates = damage_info.positive_point_coordinates
-        negative_point_coordinates = damage_info.negative_point_coordinates        
-
-        if mask_polygon != []:
-            coordinates_dict["Mask Polygon"] = mask_polygon
-
-            if positive_point_coordinates != []:
-                coordinates_dict["Points"]["1"] = positive_point_coordinates
-            if negative_point_coordinates != []:
-                coordinates_dict["Points"]["0"] = negative_point_coordinates
+        for damage_info in image_info.data_coordinates:
+            self.__json_data[frame_num]["Observations"][damage_info.damage_name] = damage_info.get_dict()
 
     def reset(self) -> None:
         self.__json_data = dict()

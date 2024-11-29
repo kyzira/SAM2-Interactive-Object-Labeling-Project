@@ -26,10 +26,8 @@ class ImageInfo:
 
     @property
     def frame_num(self) -> int:
-        if self.image_path:
-            match = re.search(r'\d+', os.path.basename(self.image_path))
-            return int(match.group()) if match else -1
-        return -1
+        image_name = self.image_name
+        return int(image_name.split(".")[0])
 
     @property
     def img_size(self) -> tuple:
@@ -88,11 +86,3 @@ class ImageInfo:
 
         print("Error: Observation not added yet!")
         return False
-
-    def get_dict(self) -> dict:
-        frame_info_dict = {}
-
-        for damage_info in self.data_coordinates:
-            frame_info_dict.update(damage_info.get_dict())
-
-        return frame_info_dict
