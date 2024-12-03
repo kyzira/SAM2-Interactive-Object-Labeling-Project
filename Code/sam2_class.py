@@ -163,7 +163,7 @@ class Sam2Class:
     
     def __load_model(self, checkpoint_filepath: str, model_filepath: str) -> bool:
         # check if both paths are not empty and exist, else print error and return False
-        self.predictor = build_sam2_video_predictor(model_filepath, checkpoint_filepath, )
+        self.predictor = build_sam2_video_predictor(model_filepath, checkpoint_filepath)
         return True
 
     def __track(self, starting_point_index: int, max_frame_num_to_track_forwards: int, max_frame_num_to_track_backwards: int) -> dict:

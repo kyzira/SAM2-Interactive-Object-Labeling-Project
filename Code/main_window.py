@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import simpledialog, ttk
+from tkinter import simpledialog, messagebox, ttk
 from PIL import Image, ImageTk
 import os
 from image_info import ImageInfo
@@ -9,22 +9,12 @@ from annotation_window import AnnotationWindow
 from math import sqrt
 from json_annotation_manager import JsonAnnotationManager
 from frame_extraction import FrameExtraction
-from dataclasses import dataclass, field
 from video_player_window import VideoPlayerWindow
 from sam2_class import Sam2Class
 import cv2
 import numpy as np
 from deinterlace_video import DeinterlaceVideo
-
-@dataclass
-class ButtonState:
-    button_name: int
-    is_selected: bool
-    is_visible: bool
-    overlay_color: str
-    selection_button: tk.Button = field(default=None)
-    visibility_button: tk.Button = field(default=None)
-
+from small_dataclasses import Setup, ButtonState
 
 class MainWindow:
     """
@@ -76,14 +66,13 @@ class MainWindow:
             "Deleting" : "darkred",
             "Marking Up" : "red"
         }
-
         self.annotation_window_geometry = None
         self.annotation_window_maximized = False
 
         self.is_set = False
         self.run_next_loop = False
 
-    def setup(self, setup, mode: str):
+    def setup(self, setup: Setup, mode: str):
  
         self.__set_frames(setup.frame_dir)
         self.__set_settings(setup.config["settings"])
@@ -120,7 +109,6 @@ class MainWindow:
 
         self.json_annotation_manager.save()
 
-
     def __set_frames(self, frame_dir:str):
         """
         Reads the Folder for frames and creates a list of the frames as image_view instances
@@ -147,13 +135,11 @@ class MainWindow:
 
         if self.quick_extraction_buttons:
             self.__reset_video_second()
-
         
     def __set_settings(self, settings: dict):
         """
         Reads the settings dict and sets Window and Grid Size
         """
-
         try:
             window_width = settings.get("window_width", 800)
             window_height = settings.get("window_height", 600)
@@ -162,7 +148,6 @@ class MainWindow:
                 self.root.state("zoomed")
             else:  
                 self.root.geometry(f"{window_width}x{window_height}")
-
 
             grid_size = settings.get("default_grid_size", 0)
             if grid_size == 0:
@@ -188,7 +173,6 @@ class MainWindow:
             self.__load_data_from_json()
         except Exception as e:
             print(f"failed setting json! \nError: {e}")
-    
 
     def __set_segmenter(self, sam_model: Sam2Class):
         try:
@@ -218,7 +202,7 @@ class MainWindow:
             advance_buttons = False
             evaluation_buttons = False
             quick_extraction_buttons = False
-        elif mode == "folder_mode":
+        elif mode == "eval_mode":
             advance_buttons = True
             evaluation_buttons = True
             quick_extraction_buttons = False
@@ -269,8 +253,10 @@ class MainWindow:
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
 
-
     def __load_data_from_json(self):
+        """
+        Loads Masks and Point for every Frame and loads marked frames and instance intervall from the Info.
+        """
         json_data = self.json_annotation_manager.get_json()
 
         self.marked_frames = json_data["Info"].get("Marked Frames", [])
@@ -306,7 +292,6 @@ class MainWindow:
                     damage_info.positive_point_coordinates = coordinate_dict["Points"].get("1")
                     damage_info.negative_point_coordinates = coordinate_dict["Points"].get("0")
 
-
                 for (begin_frame_index, end_frame_index) in self.split_intervals[observation]:
                     if begin_frame_index <= frame_num <= end_frame_index:
                         damage_info.is_in_intervall = True
@@ -317,7 +302,6 @@ class MainWindow:
                             damage_info.is_end_of_intervall = True
 
                 image_info.data_coordinates.append(damage_info)
-
 
     def __create_window(self):
         self.__create_layout()
@@ -331,7 +315,6 @@ class MainWindow:
         self.__create_frame_extraction_widgets()
         self.__create_management_widgets()
         self.root.after(200, self.__create_image_grid)
-
 
     def __create_layout(self):
         # Configure grid layout for the root window
@@ -414,7 +397,6 @@ class MainWindow:
         grid_menu.add_command(label="Change Grid Size", command=self.__prompt_grid_size)
         grid_menu.add_command(label="Open frames folder", command=self.__open_frames_dir)
         grid_menu.add_command(label="Switch to/from interlaced Video", command=self.__switch_deinterlaced_video)
-        grid_menu.add_command(label="Test Button", command=self.__draw_overlays)
 
         left_click_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Select Mode", menu=left_click_menu)
@@ -423,7 +405,6 @@ class MainWindow:
         left_click_menu.add_command(label="Delete Split", command=lambda n="Delete Split": self.__set_left_click_mode(n))
         left_click_menu.add_command(label="Delete Mask and Points", command=lambda n="Deleting": self.__set_left_click_mode(n))
 
-
     def __create_observation_widgets(self):
         """Destroy all Buttons first and then recreate buttons for all self.observations entries"""
 
@@ -431,19 +412,12 @@ class MainWindow:
             for button_state in self.button_states:
                 button_state.selection_button.destroy()
                 button_state.visibility_button.destroy()
-
-        
-        colors = [
-            "red",  
-            "blue",  
-            "green",  
-            "yellow",  
-            "magenta"
-        ]
+   
+        colors = ["red", "blue", "green", "yellow", "magenta"]
 
         print(f"creating observation buttons for: {self.observations}")
-
         new_button_added = False
+        rightclick = "<Button-3>"
 
         for idx, observation in enumerate(self.observations):
             button_index = None
@@ -475,21 +449,15 @@ class MainWindow:
                 color = "lightgrey"
 
             visibility_button.config(relief=relief, bg=color)
-
-
-            if self.button_states[button_index].is_selected == True:
-                button.config(relief="sunken")
-            else:
-                button.config(relief="raised")
-
+            button.config(relief="sunken") if self.button_states[button_index].is_selected else button.config(relief="raised")
 
             self.button_states[button_index].selection_button = button
             self.button_states[button_index].visibility_button = visibility_button
+            button.bind(rightclick, lambda event, obs=observation: self.__delete_observation(event, obs))
 
         # Autoselect button if newly added
         if new_button_added and self.observations:
             self.__on_observation_button_pressed(observation)
-
 
     def __create_management_widgets(self):
         """This function creates the Buttons on the top right."""
@@ -549,7 +517,6 @@ class MainWindow:
     def __open_frames_dir(self):
         os.startfile(self.frame_dir)
 
-
     def __draw_overlays(self):
         """
         for every image: Draws their masks and Borders on the shown image.
@@ -586,18 +553,24 @@ class MainWindow:
         self.sam_model.reset_predictor_state()
         self.__create_observation_widgets()
 
-
     def __mark_up_mode(self, img_index):
+        if img_index is None:
+            print("Error: No image index given!")
+            return
+        
         image_info = self.image_infos[img_index]
         image_info.is_marked = not image_info.is_marked
         DrawImageInfo(image_info)
 
     def __splitting_mode(self, img_index):
+        if img_index is None:
+            print("Error: No image index given!")
+            return
+        
         image_info = self.image_infos[img_index]
         observation_index = self.observations.index(self.selected_observation)
         damage_info = image_info.data_coordinates[observation_index]
         
-
         # If click is in an other intervall
         if damage_info.is_in_intervall:
             if self.split_start:
@@ -634,7 +607,36 @@ class MainWindow:
             self.split_intervals[self.selected_observation] = intervall_list       
             self.__reset_left_click_modes()
 
+    def __delete_observation(self, event = None, observation = None):
+        if not observation:
+            print("Error: No Observation given!")
+            return
+
+        response = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete '{observation}'?")
+        if response:  # If the user clicked "Yes"
+            for image_info in self.image_infos:
+                image_info.remove_observation(observation)
+            
+            self.observations.remove(observation)
+
+            for button in self.button_states:
+                if button.button_name == observation:
+                    button.selection_button.destroy()
+                    button.visibility_button.destroy()
+                    self.button_states.remove(button)
+                    if len(self.button_states) == 0:
+                        self.selected_observation = None
+                    break
+
+            self.sam_model.reset_predictor_state()
+            self.__create_observation_widgets()
+            self.__draw_overlays()
+            
     def __delete_split_mode(self, img_index):
+        if img_index is None:
+            print("Error: No image index given!")
+            return
+        
         image_info = self.image_infos[img_index]
         observation_index = self.observations.index(self.selected_observation)
         damage_info = image_info.data_coordinates[observation_index]
@@ -676,6 +678,13 @@ class MainWindow:
         self.__reset_left_click_modes()
         
     def __delete_mode(self, img_index):
+        """
+        Deletes Point and Mask data from clicked image
+        """
+        if img_index is None:
+            print("Error: No image index given!")
+            return
+        
         image_info = self.image_infos[img_index]
         observation_index = self.observations.index(self.selected_observation)
         damage_info = image_info.data_coordinates[observation_index]
@@ -704,7 +713,7 @@ class MainWindow:
             return
         
         if self.selected_observation == None:
-            simpledialog.messagebox.showinfo("Notification", "Please Select Observation first")
+            simpledialog.messagebox.showinfo("no observation selected", "please select or create Observation first")
             return
 
         row = event.widget.grid_info()["row"]
@@ -872,6 +881,10 @@ class MainWindow:
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
                     
     def __open_annotation_window(self, index):
+        if index is None:
+            print("Error: Can not open annotation window, no index is given!")
+            return
+        
         image_info = self.image_infos[index]
         self.status_bar.config(text="Status: Labeling Frames", bg="lightgreen", fg="black")
 
@@ -891,7 +904,6 @@ class MainWindow:
         mode_color = self.left_click_mode_colors.get(mode, "goldenrod")  # Default color if mode is not found
         self.status_bar.config(text=f"Current Mode: {mode}", bg=mode_color, fg="white")  # Update text and background
         self.left_click_mode = mode
-
 
     def __reset_left_click_modes(self, event=None):
         """Resets the currently active mode and restores default appearance."""
@@ -987,7 +999,6 @@ class MainWindow:
 
             self.sam_model.reset_predictor_state()
             self.status_bar.config(text="Status: Ready", bg="lightgray", fg="black")
-
         
         selected_observation_index = self.observations.index(self.selected_observation)
         # Process each frame in all_video_segments
@@ -1009,19 +1020,13 @@ class MainWindow:
                     # Convert contour points to a list of tuples
                     simplified_contour = [(int(point[0][0]), int(point[0][1])) for point in simplified_contour]
                     polygons.append(simplified_contour)
-
             image_info.data_coordinates[selected_observation_index].mask_polygon = polygons
-
         self.__draw_overlays()
 
     def __eval_video_tracking(self, state = True):
         """state -> if the video tracking result is good (= True) or bad (= False)"""
-
         state_name = "Good" if state else "Bad"
-
-        self.json_annotation_manager.add_to_info(key="Segmentation Evaluation",
-                                         value=state_name)
-
+        self.json_annotation_manager.add_to_info(key="Segmentation Evaluation", value=state_name)
         self.__close_window(run_next_loop=True)
 
     def __close_window(self, run_next_loop=False, set_skip=False):

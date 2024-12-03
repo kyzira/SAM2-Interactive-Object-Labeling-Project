@@ -4,16 +4,9 @@ from frame_extraction import FrameExtraction
 from sam2_class import Sam2Class
 import yaml
 import os
-from dataclasses import dataclass, field
 from tkinter import filedialog
 from deinterlace_video import DeinterlaceVideo
-@dataclass
-class Setup:
-    config: dict
-    frame_dir: str
-    sam_model: Sam2Class
-    frame_extraction : FrameExtraction
-    damage_table_row: dict = field(default_factory=dict)
+from small_dataclasses import Setup
 
 
 def load_config() -> dict:
@@ -86,7 +79,7 @@ def test_mode(config, mode):
         # Ensure the frame directory exists
         os.makedirs(frame_dir, exist_ok=True)
 
-        # Initialize the FrameExtraction and extract frames
+        # Initialize the FrameExtraction and extract framess
         frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
 
         # Set up the SAM model
@@ -112,9 +105,9 @@ def test_mode(config, mode):
         print(f"Error in test_mode: {e}")
 
 
-def folder_mode(config, mode):
+def eval_mode(config, mode):
     """
-    Folder mode function to loop through all datasets in a selected folder.
+    Eval mode function to loop through all datasets in a selected folder.
     Enables evaluation buttons in the MainWindow.
     """
     results_dir = filedialog.askdirectory(
@@ -165,6 +158,60 @@ def folder_mode(config, mode):
             break
 
 
+def single_folder_mode(config, mode):
+    """
+    Folder mode function lets you choose which folder you want to look at at every loop.
+    Enables evaluation buttons in the MainWindow.
+    """
+
+    # Initialize SAM model
+    sam_model = Sam2Class(
+        checkpoint_filepath=config["sam_model_paths"]["sam2_checkpoint"],
+        model_filepath=config["sam_model_paths"]["model_cfg"]
+    )
+
+    while True:
+        folder_path = filedialog.askdirectory(
+        title="Select the video folder",
+        initialdir=os.path.dirname(os.path.dirname(os.path.realpath(__file__))),
+        )
+
+        if not folder_path:
+            print("No folder selected. Exiting folder mode.")
+            return
+
+
+        frame_dir = os.path.join(folder_path, "source images")
+        if not os.path.isdir(frame_dir):
+            continue
+
+
+        json_path = os.path.join(folder_path, f"{os.path.basename(folder_path)}.json")
+        
+        if not os.path.exists(frame_dir) or not os.path.exists(json_path):
+            print(f"Skipping {folder_path}: Required files (frames or JSON) not found.")
+            continue
+        
+        frame_extraction = FrameExtraction(video_path=None, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
+
+        # Prepare the Setup dataclass for the main window
+        setup = Setup(config=config, frame_dir=frame_dir, sam_model=sam_model, frame_extraction=frame_extraction, damage_table_row={})
+
+        # Initialize and open the main window
+        main_window = MainWindow()
+        main_window.setup(setup, mode)
+        main_window.open()
+
+        # Save JSON after running
+        print(f"Completed processing for {folder_path}. Saving data to JSON.")
+        main_window.save_to_json()
+
+        # If the user exits or cancels, break the loop
+        if not main_window.run_next_loop:
+            print("User exited folder mode.")
+            break
+
+
 def close_window(app):
     """Close the Tkinter window and save the JSON data."""
     app.save_to_json()
@@ -183,8 +230,12 @@ def main():
         test_mode(config, mode)
     elif mode == "list_mode": 
         list_mode(config, mode)
-    elif mode == "folder_mode": 
-        folder_mode(config, mode)
+    elif mode == "eval_mode": 
+        eval_mode(config, mode)
+    elif mode == "single_folder_mode":
+        single_folder_mode(config, mode)
+    else:
+        print("Error: given mode not known!")
     
 
 if __name__ == "__main__":
