@@ -13,11 +13,11 @@ mode: list_mode
 # Use the whole paths. The checkpoint is the file you have to download yourself the model config is in your downloaded sam2 repo.
 # !You have to match the Model sizes.
 sam_model_paths:
-  # sam2_checkpoint: C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt
-  # model_cfg: C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
+  sam2_checkpoint: C:\Users\K3000\sam2\checkpoints\sam2.1_hiera_large.pt
+  model_cfg: C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_l.yaml
 
-  sam2_checkpoint: C:\Users\K3000\Desktop\checkpoint.pt
-  model_cfg: C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_b+.yaml
+  # sam2_checkpoint: C:\Users\K3000\Desktop\trained_sam2.1_b+.pt
+  # model_cfg: C:\Users\K3000\sam2\sam2\configs\sam2.1\sam2.1_hiera_b+.yaml
 
 # These are the list mode paths
 default_paths:
