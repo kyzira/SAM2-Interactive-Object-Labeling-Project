@@ -203,6 +203,17 @@ and install all needed libraries with
 pip install -r requirements.txt
 ```
 
+### FFMPEG
+
+If you want to use deinterlacing filters you will need ffmpeg.
+
+First download the full version of ffmpeg from [their website](https://www.ffmpeg.org/download.html).
+On Windows select ``Windows builds from gyan.dev`` and when you get redirected scroll down a bit to download ``ffmpeg-git-full.7z``.
+
+Open the archive and save the folder inside on ``C:\``. Also rename it to `ffmpeg`.
+
+Now you will need to add the path to the ``bin`` folder in to your User ``PATH`` variable. Just add `C:\ffmpeg\bin` and thats it.
+
 ## Getting Started
 
 Before being able to just run the main.py, you'll need to set up the set path inside the config file.

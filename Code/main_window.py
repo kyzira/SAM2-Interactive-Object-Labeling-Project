@@ -860,7 +860,7 @@ class MainWindow:
         video_player.open()
         start_second, end_second = video_player.get_result()
 
-        if not start_second and not end_second:
+        if start_second is None or end_second is None:
             self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
             return
         

@@ -143,7 +143,7 @@ class Sam2Class:
         try:
             # Delete the predictor to release GPU memory
             self.predictor.reset_state(self.inference_state)
-            del self.inference_state
+
             # Clear CUDA cache
             gc.collect()
             torch.cuda.empty_cache()

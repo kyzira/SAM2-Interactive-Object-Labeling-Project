@@ -24,11 +24,13 @@ class VideoPlayerWindow:
         self.is_playing = False
         self.frame_rate = 30
         self.start_second = start_second
+        self.end_second = None
 
     def open(self):
         self.root = tk.Toplevel()
         self.root.title("Video Player")
         self.__setup_ui()
+        self.root.protocol("WM_DELETE_WINDOW", self.__on_close)
         if self.video_path:
             self.__load_video(self.video_path)
         self.root.mainloop()
@@ -37,11 +39,14 @@ class VideoPlayerWindow:
         """
         Returns start and end in seconds
         """
-        start_second = int(self.start_frame/self.frame_rate)
-        end_second = int(self.stop_frame/self.frame_rate)
+        return self.start_second, self.end_second
+    
+    def __on_close(self):
+        self.start_second = None
+        self.end_second = None
 
-        return start_second, end_second
-
+        self.root.quit()
+        self.root.destroy()
 
     def __setup_ui(self):
         # Main frame
@@ -202,6 +207,10 @@ class VideoPlayerWindow:
         try:
             self.start_frame = int(self.start_frame_var.get())
             self.stop_frame = int(self.stop_frame_var.get())
+
+            self.start_second = int(self.start_frame/self.frame_rate)
+            self.end_second = int(self.stop_frame/self.frame_rate)
+
             self.root.quit()
             self.root.destroy()
         except ValueError:

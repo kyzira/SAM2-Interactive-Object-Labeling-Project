@@ -1,2 +1,7 @@
 __pycache__/
 Code/train/single image sam training/model.torch
+Code/Code Tests/__pycache__/extract_frames_from_video.cpython-312.pyc
+*.pyc
+*.pyc
+Code/training/single image sam training/model.torch
+Code/Code Tests/__pycache__/extract_frames_from_video.cpython-312.pyc
