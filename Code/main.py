@@ -7,6 +7,8 @@ import os
 from tkinter import filedialog
 from deinterlace_video import DeinterlaceVideo
 from small_dataclasses import Setup
+import shutil
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 
 def load_config() -> dict:
@@ -38,12 +40,23 @@ def list_mode(config, mode):
         os.makedirs(frame_dir, exist_ok=True)
 
         video_path = damage_table_row["Videopfad"]
-
         if config["settings"].get("auto_deinterlacing") == True:
             print("Deinterlacing Video...")
             output_path = os.path.join(deinterlaced_video_dir, os.path.basename(video_path))
-            DeinterlaceVideo(video_path, output_path)
-            video_path = output_path
+            # Deinterlace Video with timeout
+            def deinterlace_with_timeout():
+                DeinterlaceVideo(video_path, output_path)
+
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(deinterlace_with_timeout)
+                try:
+                    future.result(timeout=config["settings"].get("deinterlacing_timeout", 30))  # Timeout in seconds
+                    video_path = output_path
+                except TimeoutError:
+                    print(f"Deinterlacing timed out for video: {video_path}")
+                    # Optionally, handle what should happen after a timeout
+                    video_path = damage_table_row["Videopfad"]
+                    continue
 
         frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
         start_time, end_time = calculate_time_bounds(damage_table_row["Videozeitpunkt (h:min:sec)"], config)
@@ -62,7 +75,7 @@ def list_mode(config, mode):
             break
 
         damage_table_row = table_and_index.get_damage_table_row()
-    
+
 
 def test_mode(config, mode):
     """
@@ -236,6 +249,10 @@ def main():
         single_folder_mode(config, mode)
     else:
         print("Error: given mode not known!")
+
+    if config["settings"].get("deinterlaced_video_storage_is_temporary"):
+        print("Cleaning up deinterlaced Videos..")
+        shutil.rmtree(os.path.join(config["default_paths"]["output_path"], "deinterlaced videos"), ignore_errors=True)
     
 
 if __name__ == "__main__":

@@ -675,6 +675,7 @@ class MainWindow:
             self.image_infos[i].data_coordinates[observation_index]  = new_damage_info
             DrawImageInfo(self.image_infos[i])
 
+        self.split_intervals[self.selected_observation].remove((self.image_infos[start_of_intervall].frame_num, self.image_infos[end_of_intervall].frame_num))
         self.__reset_left_click_modes()
         
     def __delete_mode(self, img_index):

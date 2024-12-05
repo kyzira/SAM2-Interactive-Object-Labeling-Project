@@ -36,6 +36,8 @@ settings:
   extraction_frame_per_frames: 25  # In what rate a frame shall be extracted
 
   auto_deinterlacing: True
+  deinterlacing_timeout: 30
+  deinterlaced_video_storage_is_temporary: True
 
 # Every element of this list will become a seperate Button for quickly adding new classes
 object_add_buttons:
