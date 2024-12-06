@@ -11,6 +11,7 @@ class JsonAnnotationManager:
     def load(self, json_filepath: str) -> bool:
         self.__json_filepath = json_filepath
         if not os.path.exists(json_filepath):
+            print("json does not exist")
             self.save()
 
         try:

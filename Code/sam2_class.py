@@ -38,6 +38,7 @@ class Sam2Class:
             self.frame_dir = frame_dir
 
         self.inference_state = self.predictor.init_state(video_path=self.frame_dir)
+        self.reset_predictor_state()
 
     def add_points(self, image_info: ImageInfo):
         """
@@ -107,8 +108,6 @@ class Sam2Class:
         # Reset SAM and add points from the middle frame
         self.reset_predictor_state()
         
-        print(f"Tracking from Frame {start_frame_index} to {end_frame_index}")
-
         frame_indexes_with_points = self.__get_frame_infos_with_points_from_intervall(frame_infos, start_frame_index, end_frame_index)
 
         if len(frame_indexes_with_points) < 1:
@@ -202,16 +201,30 @@ class Sam2Class:
         """
         frames_with_points = []
 
-        image_info = frame_infos[0]
-        for i, damage_info in enumerate(image_info.data_coordinates):
-            if damage_info.is_selected == True:
-                selected_observation = damage_info.damage_name
-                damage_index = i
+        selected_observation = None
+        i = 0
 
-        print(f"Object to track: {selected_observation}")
+        while selected_observation == None:
+            image_info = frame_infos[i]
+            i += 1
+            for index, damage_info in enumerate(image_info.data_coordinates):
+                if damage_info.is_selected == True:
+                    selected_observation = damage_info.damage_name
+                    damage_index = index
+
+        try:
+            print(f"Object to track: {selected_observation} with index {damage_index}")
+        except Exception as e:
+            print(f"{e}")
+            return
+
         # Collect frames within the interval and check for points on the selected observation
-        for frame_index in range(start_frame_index, end_frame_index+1):
+        for frame_index in range(start_frame_index, end_frame_index +1):
             image_info = frame_infos[frame_index]
+
+            if len(image_info.data_coordinates) < damage_index:
+                print(f"Entries in data coordinates: {len(image_info.data_coordinates)}")
+                continue
 
             damage_info = image_info.data_coordinates[damage_index]
 

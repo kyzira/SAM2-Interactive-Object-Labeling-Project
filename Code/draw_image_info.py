@@ -24,7 +24,6 @@ class DrawImageInfo:
 
             if image_info.is_marked:
                 self.__draw_border("top", "red_full")
-
             image_info.drawn_image = self.__drawn_image
         except Exception as e:
             print(f"Error in drawing: {e}")
@@ -118,11 +117,11 @@ class DrawImageInfo:
 
     def __get_split_color(self, num):
         color_map = [
-            (0, 0, 64, 255),         
-            (65, 105, 225, 255),     
-            (34, 139, 34, 255),      
-            (0, 139, 139, 255),      
-            (75, 0, 130, 255),       
-            (139, 0, 139, 255),      
+            (0, 255, 255, 255),       # Cyan
+            (127, 255, 212, 255),     # Aqua
+            (0, 255, 0, 255),         # Neon green
+            (255, 0, 255, 255),       # Magenta
+            (128, 0, 128, 255),       # Purple
+            (255, 255, 0, 255),       # Bright yellow
         ]
         return color_map[num % len(color_map)]

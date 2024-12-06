@@ -73,7 +73,8 @@ class MainWindow:
         self.run_next_loop = False
 
     def setup(self, setup: Setup, mode: str):
- 
+        self.setup_var = setup
+        self.mode_var = mode
         self.__set_frames(setup.frame_dir)
         self.__set_settings(setup.config["settings"])
         self.__set_segmenter(setup.sam_model)
@@ -187,8 +188,13 @@ class MainWindow:
         """
         self.__create_menubar()
 
-        for observation in predefined_object_classes:
-            self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.__add_observation(observation=n))
+        if predefined_object_classes == ["BAB", "BBA", "BCA"]:
+            self.add_menu.add_command(label=f"Add Riss", command=lambda n="BAB": self.__add_observation(observation=n))
+            self.add_menu.add_command(label=f"Add Wurzel", command=lambda n="BBA": self.__add_observation(observation=n))
+            self.add_menu.add_command(label=f"Add Anschluss", command=lambda n="BCA": self.__add_observation(observation=n))
+        else:
+            for observation in predefined_object_classes:
+                self.add_menu.add_command(label=f"Add {observation}", command=lambda n=observation: self.__add_observation(observation=n))
 
     def __set_start_observation(self, start_observation: str):
         self.start_observation = start_observation
@@ -249,7 +255,6 @@ class MainWindow:
         self.frame_extractor.extract_frames_by_damage_time(self.video_start_second, self.video_end_second, extraction_rate=25)
         self.__reinit_frames()
         self.__reset_video_second()
-        self.__set_segmenter(self.sam_model)
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
 
@@ -258,9 +263,10 @@ class MainWindow:
         Loads Masks and Point for every Frame and loads marked frames and instance intervall from the Info.
         """
         json_data = self.json_annotation_manager.get_json()
-
+        
         self.marked_frames = json_data["Info"].get("Marked Frames", [])
         self.split_intervals = json_data["Info"].get("Instance Intervals", {})
+        print(self.split_intervals)
 
         # Check which Observations already in Json
         for value in json_data.values():
@@ -271,37 +277,80 @@ class MainWindow:
 
         for i, image_info in enumerate(self.image_infos):
             frame_num = image_info.frame_num
+
+            if i < len(self.image_infos) -1:
+                next_frame_num = self.image_infos[i+1].frame_num
+            elif i == len(self.image_infos) -1:
+                next_frame_num = self.image_infos[i].frame_num + 1
+
             frame_data = json_data.get(str(int(frame_num)))
             image_info.image_index = i
 
             if frame_data == None:
+                frame_data = json_data.get(int(frame_num))
+
+            if frame_data == None:
+                for observation in self.observations:
+                    damage_info = DamageInfo(observation)
+                    image_info.data_coordinates.append(damage_info)
                 continue
 
             if frame_num in self.marked_frames:
                 image_info.is_marked = True
 
             for observation in self.observations:
-                coordinate_dict = frame_data["Observations"].get(observation)
-
-                if not coordinate_dict:
-                    continue
-
+                new_intervalls = []
+                coordinate_dict = frame_data["Observations"].get(observation, dict())
+                
                 damage_info = DamageInfo(observation)
+
+                if coordinate_dict == dict():
+                    image_info.data_coordinates.append(damage_info)
+                    continue
+                
                 damage_info.mask_polygon = coordinate_dict.get("Mask Polygon")
                 if "Points" in coordinate_dict:
                     damage_info.positive_point_coordinates = coordinate_dict["Points"].get("1")
                     damage_info.negative_point_coordinates = coordinate_dict["Points"].get("0")
 
-                for (begin_frame_index, end_frame_index) in self.split_intervals[observation]:
-                    if begin_frame_index <= frame_num <= end_frame_index:
-                        damage_info.is_in_intervall = True
-                    
-                        if begin_frame_index == frame_num:
-                            damage_info.is_start_of_intervall = True
-                        elif end_frame_index == frame_num:
-                            damage_info.is_end_of_intervall = True
+                # When frames are skipped due to similarity, we have to adjust the split intervals
+                for begin_frame_num, end_frame_num in self.split_intervals[observation]:
+                    val1 = begin_frame_num
+                    val2 = end_frame_num
+                    print(f"current frame num: {frame_num}, next_frame_num: {next_frame_num}, begin: {begin_frame_num}, end: {end_frame_num}")
 
+                    if frame_num <= begin_frame_num and begin_frame_num < next_frame_num:
+                        val1 = frame_num
+                        damage_info.is_start_of_intervall = True
+
+                    if frame_num <= end_frame_num and end_frame_num < next_frame_num:
+                        val2 = frame_num
+                        damage_info.is_end_of_intervall = True
+
+                    new_intervalls.append(val1, val2)
+
+                self.split_intervals[observation] = new_intervalls
                 image_info.data_coordinates.append(damage_info)
+
+        # Move start and end of intervall into shown bounds
+        smallest_frame_num = self.image_infos[0].frame_num
+        largest_frame_num = self.image_infos[-1].frame_num
+        
+        for index, observation in enumerate(self.observations):
+            new_intervalls = []
+            for begin_frame_num, end_frame_num in self.split_intervals[observation]:
+                val1 = begin_frame_num
+                val2 = end_frame_num
+                if begin_frame_num <= smallest_frame_num <= end_frame_num:
+                    val1 = smallest_frame_num
+                    self.image_infos[0].data_coordinates[index].is_start_of_intervall = True
+                if begin_frame_num <= largest_frame_num <= end_frame_num:
+                    val2 = largest_frame_num
+                    self.image_infos[-1].data_coordinates[index].is_end_of_intervall = True
+                new_intervalls.append((val1, val2))
+            self.split_intervals[observation] = new_intervalls
+        
+        print(self.split_intervals)
 
     def __create_window(self):
         self.__create_layout()
@@ -366,8 +415,6 @@ class MainWindow:
         self.status_bar = tk.Label(self.status_bar_frame, text="Status: Ready", anchor=tk.W)
         self.status_bar.grid(row=0, column=0, sticky="nsew", padx=10)
 
-        # Determine text for the right-aligned label
-        self.is_deinterlaced = False
         if self.is_deinterlaced:
             text = "interlaced video"
         else:
@@ -572,7 +619,15 @@ class MainWindow:
         damage_info = image_info.data_coordinates[observation_index]
         
         # If click is in an other intervall
-        if damage_info.is_in_intervall:
+        frame_num = image_info.frame_num
+        split_intervals = self.split_intervals.get(self.selected_observation, [])
+
+        for (start_frame_num, end_frame_num) in split_intervals:
+            if frame_num < start_frame_num:
+                continue
+            if frame_num > end_frame_num:
+                continue
+
             if self.split_start:
                 self.image_infos[self.split_start].data_coordinates[observation_index].is_start_of_intervall = False
                 DrawImageInfo(self.image_infos[self.split_start])
@@ -580,12 +635,10 @@ class MainWindow:
             return
 
         # If this is the first click
-        elif self.split_start is None:
+        if self.split_start is None:
             self.split_start = img_index
             damage_info.is_start_of_intervall = True
-            damage_info.is_in_intervall = True
             DrawImageInfo(self.image_infos[img_index])
-            damage_info.is_in_intervall = False
             
         else:
             if img_index < self.split_start:
@@ -595,16 +648,11 @@ class MainWindow:
                 return
 
             damage_info.is_end_of_intervall = True
-            damage_info.is_in_intervall = True
             DrawImageInfo(self.image_infos[img_index])
 
-            for i in range(self.split_start, img_index + 1):
-                image_info = self.image_infos[i]
-                image_info.data_coordinates[observation_index].is_in_intervall = True
-            
             intervall_list = self.split_intervals.get(self.selected_observation, [])
             intervall_list.append((self.image_infos[self.split_start].frame_num, self.image_infos[img_index].frame_num))
-            self.split_intervals[self.selected_observation] = intervall_list       
+            self.split_intervals[self.selected_observation] = intervall_list   
             self.__reset_left_click_modes()
 
     def __delete_observation(self, event = None, observation = None):
@@ -639,43 +687,30 @@ class MainWindow:
         
         image_info = self.image_infos[img_index]
         observation_index = self.observations.index(self.selected_observation)
-        damage_info = image_info.data_coordinates[observation_index]
 
-        if damage_info.is_in_intervall == False:
-            return
+        # If click is in an intervall
+        frame_num = image_info.frame_num
+        split_intervals = self.split_intervals.get(self.selected_observation, [])
+        intervall = None
+
+        for (start_frame_num, end_frame_num) in split_intervals:
+            if frame_num < start_frame_num:
+                continue
+            if frame_num > end_frame_num:
+                continue
+            intervall = (start_frame_num, end_frame_num)
+            break
         
-        start_of_intervall = None
-        end_of_intervall = None
+        if intervall is None:
+            return
 
-        counter = 0
-        if damage_info.is_end_of_intervall:
-            end_of_intervall = img_index
-        else:
-            while damage_info.is_end_of_intervall == False:
-                counter += 1
-                image_info = self.image_infos[img_index + counter]
-                damage_info = image_info.data_coordinates[observation_index]
-            end_of_intervall = img_index + counter
-
-        image_info = self.image_infos[img_index]
-        damage_info = image_info.data_coordinates[observation_index]
-        counter = 0
-        if damage_info.is_start_of_intervall:
-            start_of_intervall = img_index
-        else:
-            while damage_info.is_start_of_intervall == False:
-                counter += 1
-                image_info = self.image_infos[img_index - counter]
-                damage_info = image_info.data_coordinates[observation_index]
-            start_of_intervall = img_index - counter
-
-        for i in range(start_of_intervall, end_of_intervall + 1):
+        for i in range(intervall[0], intervall[1] + 1):
             new_damage_info = DamageInfo(self.selected_observation)
             new_damage_info.is_selected = True
             self.image_infos[i].data_coordinates[observation_index]  = new_damage_info
             DrawImageInfo(self.image_infos[i])
 
-        self.split_intervals[self.selected_observation].remove((self.image_infos[start_of_intervall].frame_num, self.image_infos[end_of_intervall].frame_num))
+        self.split_intervals[self.selected_observation].remove(intervall)
         self.__reset_left_click_modes()
         
     def __delete_mode(self, img_index):
@@ -738,7 +773,7 @@ class MainWindow:
                 self.__splitting_mode(0)
                 self.__splitting_mode(len(self.image_infos) - 1)
                 self.__create_image_grid()
-                
+
             for start, end in self.split_intervals[self.selected_observation]:
                 if start <= self.image_infos[img_index].frame_num <= end:
                     clicked_intervall = (start, end)
@@ -751,7 +786,6 @@ class MainWindow:
             
             try:
                 self.next_button.config(state=tk.DISABLED)
-                self.skip_button.config(state=tk.DISABLED)
             except:
                 pass
 
@@ -831,15 +865,16 @@ class MainWindow:
         """
         self.status_bar.config(text="Status: Extracting Frames", bg="lightgreen", fg="black")
         self.root.update()
-
-        for filename in os.listdir(self.frame_dir):
+        i = 0
+        for i, filename in enumerate(os.listdir(self.frame_dir)):
             file_path = os.path.join(self.frame_dir, filename)  # Get full file path
             try:
                 if os.path.isfile(file_path):  # Check if it's a file
                     os.remove(file_path)  # Delete the file
-                    print(f"Deleted: {file_path}")
             except Exception as e:
                 print(f"Error deleting {file_path}: {e}")
+
+        print(f"removed {i} images!")
 
         if reverse == False:
             start_second = self.video_start_second
@@ -848,10 +883,11 @@ class MainWindow:
             start_second = self.video_start_second - to_extract_seconds
             end_second = self.video_end_second
 
+
+
         self.frame_extractor.extract_frames_by_damage_time(start_second, end_second, extraction_rate=25)
         self.__reinit_frames()
         self.__reset_video_second()
-        self.__set_segmenter(self.sam_model)
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
 
@@ -877,7 +913,6 @@ class MainWindow:
         self.frame_extractor.extract_frames_by_damage_time(start_second, end_second, extraction_rate=25)
         self.__reinit_frames()
         self.__reset_video_second()
-        self.__set_segmenter(self.sam_model)
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
                     
@@ -930,28 +965,46 @@ class MainWindow:
         self.__create_image_grid()
 
     def __reinit_frames(self):
-        # Get Current Frame list:
-        frame_name_list = []
-        new_frames = []
-        for img_info in self.image_infos:
-            frame_name = img_info.image_name
-            frame_name_list.append(frame_name)
+        """
+        Reinitialize the frames and reload all associated data.
+        """
+        try:
+            # Save observations before clearing
+            old_observations = self.observations.copy()
+            selected_observation = self.selected_observation
 
-        for file in sorted(os.listdir(self.frame_dir)):
-            if file.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')):
-                image_info = None
-                if file in frame_name_list:
-                    image_info = self.image_infos[frame_name_list.index(file)]
-                else:
-                    file_path = os.path.join(self.frame_dir, file)
-                    image_info = ImageInfo(file_path)
+            # Save current data to JSON
+            self.save_to_json()
 
-                image_info.load_image()
-                image_info.image_index = len(new_frames)
+            # Reinitialize frames
+            self.__set_frames(self.frame_dir)
 
-                new_frames.append(image_info)
+            # Reload JSON data after frames are reset
+            self.__load_data_from_json()
 
-        self.image_infos = new_frames
+            # Ensure the segmenter state is reset
+            self.sam_model.load(self.frame_dir)
+
+            # Re-add old observations
+            for observation in old_observations:
+                if observation not in self.observations:
+                    print(f"Re-adding observation: {observation}")
+                    self.__add_observation(observation)
+
+            # Re-select the previously selected observation, if any
+            if selected_observation:
+                self.__on_observation_button_pressed(selected_observation)
+
+            # Redraw overlays
+            self.__draw_overlays()
+
+            print("Frames reinitialized successfully.")
+
+            print(f"Observations: {self.observations}, Intervalls: {self.split_intervals}")
+        except Exception as e:
+            print(f"Error during frame reinitialization: {e}")
+
+
 
     def __track_object_in_video(self):
         """Tracks Objects based on their given Points in their intervalls"""
@@ -963,7 +1016,6 @@ class MainWindow:
 
         try:
             self.next_button.config(state=tk.NORMAL)
-            self.skip_button.config(state=tk.NORMAL)
         except:
             pass
 
@@ -972,24 +1024,27 @@ class MainWindow:
             return
 
         # If the selected observation has intervals
-        for start_frame_num, end_frame_num in self.split_intervals[self.selected_observation]:
-            print(f"\nTracking Object {self.selected_observation} form frame {start_frame_num} to frame {end_frame_num}!")
+        for (start_frame_num, end_frame_num) in self.split_intervals[self.selected_observation]:
+            print(f"\nTracking Object {self.selected_observation} form frame {start_frame_num} to frame {end_frame_num}")
 
             # Get Index first:
             start_frame_index = None
             end_frame_index = None
             for index, image_info in enumerate(self.image_infos):
-                if start_frame_num == image_info.frame_num:
+                frame_num = int(image_info.frame_num)
+                print(f"Checking frame number: {frame_num} against start: {start_frame_num}, end: {end_frame_num}")
+                if int(start_frame_num) == frame_num:
                     start_frame_index = index
-                elif end_frame_num == image_info.frame_num:
+                elif int(end_frame_num) == frame_num:
                     end_frame_index = index
                 
                 if start_frame_index and end_frame_index:
                     break
 
-            # Check if start_frame_index and end_frame_index are valid
+            # Check if start_frame_index and end_frame_num are valid
             if start_frame_index is None or end_frame_index is None:
                 print(f"Error: Frame indices for start ({start_frame_num}) or end ({end_frame_num}) could not be found.")
+                print(f"found ones are: {start_frame_index} and {end_frame_index}")
                 continue
 
             # Call propagate_through_interval for each interval and accumulate results
@@ -999,7 +1054,8 @@ class MainWindow:
                 all_video_segments.update(video_segments)  # Merge results
 
             self.sam_model.reset_predictor_state()
-            self.status_bar.config(text="Status: Ready", bg="lightgray", fg="black")
+
+        self.status_bar.config(text="Status: Ready", bg="lightgray", fg="black")
         
         selected_observation_index = self.observations.index(self.selected_observation)
         # Process each frame in all_video_segments

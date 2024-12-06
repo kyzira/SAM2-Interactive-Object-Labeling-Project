@@ -11,7 +11,6 @@ class DamageInfo:
     mask_polygon: list[int] = field(init=False, default_factory=list)
 
     is_start_of_intervall: bool = field(init=False, default=False)
-    is_in_intervall: bool = field(init=False, default=False)
     is_end_of_intervall: bool = field(init=False, default=False)
 
     is_shown: bool = field(init=False, default=True)
@@ -26,8 +25,6 @@ class DamageInfo:
                             "1": self.positive_point_coordinates,
                             "0": self.negative_point_coordinates
                         }
-        if not self.mask_polygon:
-            return
         
         if len(self.mask_polygon) > 0:
             damage_dict["Mask Polygon"] = self.mask_polygon

@@ -84,7 +84,7 @@ class AnnotationWindow:
                 self.is_set["Image Info"] = True
                 return
         
-        print("Error: Selected Damage couldnt be found!")
+        print("Error: No Damage in Image Info is_selected!")
         print("Using arbitrary Value: 0")
         self.object_class_id = 0
         self.color = self.__get_color(color_index=0)
@@ -234,14 +234,19 @@ class AnnotationWindow:
     def __segment_image(self):
         # Prepare the structure and then send to sam
 
-        self.image_info.data_coordinates[self.object_class_id].mask_polygon = self.polygons
-        self.image_info.data_coordinates[self.object_class_id].positive_point_coordinates = self.points["1"]
-        self.image_info.data_coordinates[self.object_class_id].negative_point_coordinates = self.points["0"]
+        try:
+            self.image_info.data_coordinates[self.object_class_id].mask_polygon = self.polygons
+            self.image_info.data_coordinates[self.object_class_id].positive_point_coordinates = self.points["1"]
+            self.image_info.data_coordinates[self.object_class_id].negative_point_coordinates = self.points["0"]
+        except Exception as e:
+            print(f"Image info: {self.image_info}, object class id: {self.object_class_id}\nError: {e}")
+            return
 
         mask = self.sam_model.add_points(self.image_info)
 
         if len(mask) == 0:
             print("Error: Mask length == 0")
+            return
 
         polygons = []
         mask = np.squeeze(mask)  # Squeeze to remove dimensions of size 1

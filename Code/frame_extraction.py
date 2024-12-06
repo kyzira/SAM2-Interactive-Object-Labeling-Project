@@ -62,6 +62,8 @@ class FrameExtraction:
                 print(f"Failed to read frame {frame_number}.")
                 break
             
+            frame = self.__apply_histogram_equalization(frame)
+            
             if last_frame is not None:
                 similarity_index = self.__check_for_similarity(last_frame, frame)
             if last_frame is not None and similarity_index > self.similarity_threshold:
@@ -80,6 +82,20 @@ class FrameExtraction:
         print(f"Frames have been saved to {self.output_dir}.\nSuccessfully Extracted {counter_pos} Frames, Skipped {counter_skipped} Frames with Avg Similarity of {int(round(avg_similarity, 2) * 100)}%\n")
         return True
 
+    def __apply_histogram_equalization(self, frame):
+        """
+        Apply histogram equalization to the frame.
+        """
+        # Convert to YUV color space
+        yuv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV)
+
+        # Equalize the histogram of the Y channel
+        yuv_frame[:, :, 0] = cv2.equalizeHist(yuv_frame[:, :, 0])
+
+        # Convert back to BGR color space
+        equalized_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR)
+        return equalized_frame
+    
     def __check_for_similarity(self, frame1, frame2):
         """
         Compares two frames and checks for similarity.
