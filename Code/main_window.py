@@ -231,7 +231,7 @@ class MainWindow:
             os.makedirs(output_dir, exist_ok=True)
             output_path = os.path.join(output_dir, os.path.basename(self.video_path))
             DeinterlaceVideo(self.video_path, output_path)
-            text = "interlaced video"
+            text = "de-interlaced video"
             self.is_deinterlaced = True
         else:
             text = "original video"
@@ -282,11 +282,9 @@ class MainWindow:
             elif i == len(self.image_infos) -1:
                 next_frame_num = self.image_infos[i].frame_num + 1
 
-            frame_data = json_data.get(str(int(frame_num)))
+            frame_data = json_data.get(str(frame_num)) or json_data.get(frame_num)
             image_info.image_index = i
 
-            if frame_data == None:
-                frame_data = json_data.get(int(frame_num))
 
             if frame_data == None:
                 for observation in self.observations:
@@ -349,6 +347,83 @@ class MainWindow:
                 new_intervalls.append((val1, val2))
             self.split_intervals[observation] = new_intervalls
 
+    def __reload_from_json(self):
+        json_data = self.json_annotation_manager.get_json()
+        
+        self.marked_frames = json_data["Info"].get("Marked Frames", [])
+        self.split_intervals = json_data["Info"].get("Instance Intervals", {})
+
+        for i, image_info in enumerate(self.image_infos):
+            frame_data = None
+            frame_num = image_info.frame_num
+
+            if i < len(self.image_infos) -1:
+                next_frame_num = self.image_infos[i+1].frame_num
+            elif i == len(self.image_infos) -1:
+                next_frame_num = self.image_infos[i].frame_num + 1
+
+            if json_data.get(str(frame_num)):
+                frame_data = json_data.get(str(frame_num))
+            elif json_data.get(frame_num):
+                frame_data = json_data.get(frame_num)
+            else: continue
+
+            image_info.image_index = i
+
+            if frame_num in self.marked_frames:
+                image_info.is_marked = True
+
+            for data_index, observation in enumerate(self.observations):
+                new_intervalls = []
+                coordinate_dict = frame_data["Observations"].get(observation)
+                
+                if coordinate_dict is None:
+                    continue
+                
+                damage_info = image_info.data_coordinates[data_index]
+
+                if coordinate_dict.get("Mask Polygon"):
+                    damage_info.mask_polygon = coordinate_dict.get("Mask Polygon")
+
+                if "Points" in coordinate_dict:
+                    damage_info.positive_point_coordinates = coordinate_dict["Points"].get("1")
+                    damage_info.negative_point_coordinates = coordinate_dict["Points"].get("0")
+
+                # When frames are skipped due to similarity, we have to adjust the split intervals
+                for begin_frame_num, end_frame_num in self.split_intervals[observation]:
+                    val1 = begin_frame_num
+                    val2 = end_frame_num
+
+                    if frame_num <= begin_frame_num and begin_frame_num < next_frame_num:
+                        val1 = frame_num
+                        damage_info.is_start_of_intervall = True
+
+                    if frame_num <= end_frame_num and end_frame_num < next_frame_num:
+                        val2 = frame_num
+                        damage_info.is_end_of_intervall = True
+
+                    new_intervalls.append((val1, val2))
+
+                self.split_intervals[observation] = new_intervalls
+
+        # Move start and end of intervall into shown bounds
+        smallest_frame_num = self.image_infos[0].frame_num
+        largest_frame_num = self.image_infos[-1].frame_num
+        
+        for index, observation in enumerate(self.observations):
+            new_intervalls = []
+            for begin_frame_num, end_frame_num in self.split_intervals[observation]:
+                val1 = begin_frame_num
+                val2 = end_frame_num
+                if begin_frame_num <= smallest_frame_num <= end_frame_num:
+                    val1 = smallest_frame_num
+                    self.image_infos[0].data_coordinates[index].is_start_of_intervall = True
+                if begin_frame_num <= largest_frame_num <= end_frame_num:
+                    val2 = largest_frame_num
+                    self.image_infos[-1].data_coordinates[index].is_end_of_intervall = True
+                new_intervalls.append((val1, val2))
+            self.split_intervals[observation] = new_intervalls
+        
     def __create_window(self):
         self.__create_layout()
 
@@ -570,9 +645,10 @@ class MainWindow:
                 DrawImageInfo(image_info)
             
             self.root.after(200, self.__create_image_grid)
-        except: pass
+        except Exception as e:
+            print(f"Error: Cant draw Overlay: {e}")
 
-    def __add_observation(self, observation=None):
+    def __add_observation(self, observation=None, skip_reset = False, skip_counting = False):
         if observation == None:
             observation = simpledialog.askstring("Add Observation", "Add Observation:")
 
@@ -582,6 +658,9 @@ class MainWindow:
         while new_observation in self.observations:
             counter += 1
             new_observation = f"{observation} {counter}" 
+
+        if skip_counting:
+            new_observation = observation
 
         if observation not in self.observations:
             self.observations.append(new_observation)   
@@ -594,8 +673,9 @@ class MainWindow:
             damage_info.is_selected = True
             image_info.data_coordinates.append(damage_info)
         
-        self.sam_model.reset_predictor_state()
-        self.__create_observation_widgets()
+        if skip_reset == False:
+            self.sam_model.reset_predictor_state()
+            self.__create_observation_widgets()
 
     def __mark_up_mode(self, img_index):
         if img_index is None:
@@ -882,6 +962,8 @@ class MainWindow:
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
 
+
+
     def __open_extraction_window(self):
         self.status_bar.config(text="Status: Extracting Frames", bg="lightgreen", fg="black")
         video_player = VideoPlayerWindow(self.frame_extractor.video_path, self.video_start_second)
@@ -955,6 +1037,47 @@ class MainWindow:
     def __resize_images(self, event=None):
         self.__create_image_grid()
 
+    # def __reinit_frames(self):
+    #     """
+    #     Reinitialize the frames and reload all associated data.
+    #     """
+    #     try:
+    #         # Save observations before clearing
+    #         old_observations = self.observations.copy()
+    #         selected_observation = self.selected_observation
+
+    #         # Save current data to JSON
+    #         self.save_to_json()
+
+    #         # Reinitialize frames
+    #         self.__set_frames(self.frame_dir)
+
+    #         # Reload JSON data after frames are reset
+    #         self.__load_data_from_json()
+
+    #         # Ensure the segmenter state is reset
+    #         self.sam_model.load(self.frame_dir)
+
+    #         # Re-add old observations
+    #         for observation in old_observations:
+    #             if observation not in self.observations:
+    #                 print(f"Re-adding observation: {observation}")
+    #                 self.__add_observation(observation)
+
+    #         # Re-select the previously selected observation, if any
+    #         if selected_observation:
+    #             self.__on_observation_button_pressed(selected_observation)
+
+    #         # Redraw overlays
+    #         self.__draw_overlays()
+
+    #         print("Frames reinitialized successfully.")
+
+    #         print(f"Observations: {self.observations}, Intervalls: {self.split_intervals}")
+    #     except Exception as e:
+    #         print(f"Error during frame reinitialization: {e}")
+
+
     def __reinit_frames(self):
         """
         Reinitialize the frames and reload all associated data.
@@ -970,17 +1093,15 @@ class MainWindow:
             # Reinitialize frames
             self.__set_frames(self.frame_dir)
 
-            # Reload JSON data after frames are reset
-            self.__load_data_from_json()
+            # Re-add observations
+            self.observations = []
+            for observation in old_observations:
+                    self.__add_observation(observation, skip_reset = True, skip_counting = True)
 
             # Ensure the segmenter state is reset
             self.sam_model.load(self.frame_dir)
 
-            # Re-add old observations
-            for observation in old_observations:
-                if observation not in self.observations:
-                    print(f"Re-adding observation: {observation}")
-                    self.__add_observation(observation)
+            self.__reload_from_json()
 
             # Re-select the previously selected observation, if any
             if selected_observation:

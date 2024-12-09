@@ -94,7 +94,6 @@ class FrameExtraction:
                 print(f"Failed to read frame {next_frame}.")
                 break
             
-            print(f"Checking frame {next_frame} now!")
             # Apply histogram equalization
             frame = self.__apply_histogram_equalization(frame)
 
@@ -103,8 +102,6 @@ class FrameExtraction:
                 similarity_index = self.__check_for_similarity(last_frame, frame)
                 if similarity_index < self.similarity_threshold:
                     extractable_frame_counter += 1
-                    print(f"Adding frame {next_frame}!")
-                else: print(f"The frame {next_frame} is too similar, skipping!")
 
             last_frame = frame
 
@@ -115,7 +112,6 @@ class FrameExtraction:
         elif direction == "backward":
             start_frame = next_frame
 
-        print(f"Extracting frames from {start_frame} to {end_frame}.")
         return self.__extract_frames(start_frame, end_frame, extraction_rate)
 
     def __extract_frames(self, start_frame: int, end_frame: int, extraction_rate: int) -> bool:

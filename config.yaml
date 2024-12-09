@@ -22,7 +22,7 @@ sam_model_paths:
 # These are the list mode paths
 default_paths:
   output_path: C:\Users\K3000\Desktop\Label Data
-  table_path: C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Max Info\max_liste.csv
+  table_path: C:\Code Python\SAM2-Interactive-Object-Labeling-Project\Infos and Tables\Aktuelle Liste.csv
 
 settings:
   default_grid_size: 0   # If set to 0: default to loading maximum if set to any other number set grid to that size
@@ -35,7 +35,7 @@ settings:
   image_similarity_threshold: 0.8  # Threshold how similar frames can be when taking them from the video
   extraction_frame_per_frames: 25  # In what rate a frame shall be extracted
 
-  auto_deinterlacing: False
+  auto_deinterlacing: True
   deinterlacing_timeout: 30
   deinterlaced_video_storage_is_temporary: True
 
