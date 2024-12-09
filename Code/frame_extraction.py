@@ -31,6 +31,93 @@ class FrameExtraction:
 
         self.__extract_frames(int(start_frame), int(end_frame), int(extraction_rate))
 
+    def extract_video_segment_by_similarity(self, start_second: int, end_second: int, frame_count: int, extraction_rate: int, direction: str = "forward"):
+        """
+        Identify and extract a video segment from the earliest dissimilar frame
+        to the reference frame based on similarity checks.
+
+        :param start_second: The starting time in seconds.
+        :param end_second: The ending time in seconds.
+        :param frame_count: Number of frames to analyze.
+        :param extraction_rate: Number of frames to skip between analyses.
+        :param direction: Direction to analyze ("forward" or "backward").
+        """
+        if not self.fps:
+            cap = cv2.VideoCapture(self.video_path)
+            if not cap.isOpened():
+                print(f"Error opening video file: {self.video_path}")
+                return False
+            self.fps = cap.get(cv2.CAP_PROP_FPS)
+            cap.release()
+
+        cap = cv2.VideoCapture(self.video_path)
+        if not cap.isOpened():
+            print(f"Error opening video file: {self.video_path}")
+            return False
+
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        start_frame = int(start_second * self.fps)
+        end_frame = int(end_second * self.fps)
+
+        # Determine direction and boundaries
+        looking_range = None
+        if direction == "forward":
+            next_frame = min(end_frame, total_frames - 1)
+        elif direction == "backward":
+            next_frame = max(start_frame, 0)
+        else:
+            print("Invalid direction specified. Use 'forward' or 'backward'.")
+            cap.release()
+            return False
+
+        last_frame = None
+        dissimilar_start = None
+
+        extractable_frame_counter = 0
+
+        while True:
+            if extractable_frame_counter >= frame_count:
+                break
+            
+            if direction == "forward":
+                next_frame += extraction_rate
+            elif direction == "backward":
+                next_frame -= extraction_rate
+
+            if next_frame < 0 or next_frame > total_frames:
+                break
+
+            cap.set(cv2.CAP_PROP_POS_FRAMES, next_frame)
+            ret, frame = cap.read()
+
+            if not ret:
+                print(f"Failed to read frame {next_frame}.")
+                break
+            
+            print(f"Checking frame {next_frame} now!")
+            # Apply histogram equalization
+            frame = self.__apply_histogram_equalization(frame)
+
+            # Check similarity
+            if last_frame is not None:
+                similarity_index = self.__check_for_similarity(last_frame, frame)
+                if similarity_index < self.similarity_threshold:
+                    extractable_frame_counter += 1
+                    print(f"Adding frame {next_frame}!")
+                else: print(f"The frame {next_frame} is too similar, skipping!")
+
+            last_frame = frame
+
+        cap.release()
+
+        if direction == "forward":
+            end_frame = next_frame
+        elif direction == "backward":
+            start_frame = next_frame
+
+        print(f"Extracting frames from {start_frame} to {end_frame}.")
+        return self.__extract_frames(start_frame, end_frame, extraction_rate)
+
     def __extract_frames(self, start_frame: int, end_frame: int, extraction_rate: int) -> bool:
 
         last_frame = None

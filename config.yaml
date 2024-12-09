@@ -35,7 +35,7 @@ settings:
   image_similarity_threshold: 0.8  # Threshold how similar frames can be when taking them from the video
   extraction_frame_per_frames: 25  # In what rate a frame shall be extracted
 
-  auto_deinterlacing: True
+  auto_deinterlacing: False
   deinterlacing_timeout: 30
   deinterlaced_video_storage_is_temporary: True
 

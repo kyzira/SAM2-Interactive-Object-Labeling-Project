@@ -266,7 +266,6 @@ class MainWindow:
         
         self.marked_frames = json_data["Info"].get("Marked Frames", [])
         self.split_intervals = json_data["Info"].get("Instance Intervals", {})
-        print(self.split_intervals)
 
         # Check which Observations already in Json
         for value in json_data.values():
@@ -349,8 +348,6 @@ class MainWindow:
                     self.image_infos[-1].data_coordinates[index].is_end_of_intervall = True
                 new_intervalls.append((val1, val2))
             self.split_intervals[observation] = new_intervalls
-        
-        print(self.split_intervals)
 
     def __create_window(self):
         self.__create_layout()
@@ -525,8 +522,8 @@ class MainWindow:
         self.extract_from_video = tk.Button(self.second_frame, text="Extract from Video", command=lambda: self.__open_extraction_window(), height=2, width=23).pack(side="right", padx=5, pady=5)
 
         if self.quick_extraction_buttons == True:
-            self.extract_forwards = tk.Button(self.second_frame, text="> +10s", command=lambda: self.__on_extract_frames(10, False), height=2, width=10).pack(side="right", padx=5, pady=5)
-            self.extract_backwards = tk.Button(self.second_frame, text="+10s <", command=lambda: self.__on_extract_frames(10, True), height=2, width=10).pack(side="right", padx=5, pady=5)           
+            self.extract_forwards = tk.Button(self.second_frame, text="> +10 Frames", command=lambda: self.__on_extract_frames(10, "forward"), height=2, width=10).pack(side="right", padx=5, pady=5)
+            self.extract_backwards = tk.Button(self.second_frame, text="+10 Frames <", command=lambda: self.__on_extract_frames(10, "backward"), height=2, width=10).pack(side="right", padx=5, pady=5)           
 
     def __create_image_grid(self):
         """Puts the images on the grid."""
@@ -856,12 +853,14 @@ class MainWindow:
         
         self.__draw_overlays()
 
-    def __on_extract_frames(self, to_extract_seconds: int, reverse=False):
+    def __on_extract_frames(self, to_extract_frames: int, direction="forward"):
         """
         This function extracts extra seconds from the video.
         Args:
-            to_extract_seconds: The given integer is the amount of seconds to extract going from the beginning or the end of the cut frames
-            reverse: This determines, if the extra frames are cut from the end going to the end or from the beginning and going to the start of the video
+            to_extract_frames: The given integer is the amount of frames to extract going from the beginning or the end of the cut frames
+            direction:  Correct inputs are "forward" and "backward"
+                        This determines, if the extra frames are cut from the end going to the end or from the beginning and going to the start of the video
+            
         """
         self.status_bar.config(text="Status: Extracting Frames", bg="lightgreen", fg="black")
         self.root.update()
@@ -876,16 +875,8 @@ class MainWindow:
 
         print(f"removed {i} images!")
 
-        if reverse == False:
-            start_second = self.video_start_second
-            end_second = self.video_end_second + to_extract_seconds
-        else:
-            start_second = self.video_start_second - to_extract_seconds
-            end_second = self.video_end_second
+        self.frame_extractor.extract_video_segment_by_similarity(self.video_start_second, self.video_end_second, to_extract_frames, 25, direction)
 
-
-
-        self.frame_extractor.extract_frames_by_damage_time(start_second, end_second, extraction_rate=25)
         self.__reinit_frames()
         self.__reset_video_second()
         self.__draw_overlays()
@@ -1032,7 +1023,6 @@ class MainWindow:
             end_frame_index = None
             for index, image_info in enumerate(self.image_infos):
                 frame_num = int(image_info.frame_num)
-                print(f"Checking frame number: {frame_num} against start: {start_frame_num}, end: {end_frame_num}")
                 if int(start_frame_num) == frame_num:
                     start_frame_index = index
                 elif int(end_frame_num) == frame_num:

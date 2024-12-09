@@ -8,7 +8,7 @@ from tkinter import filedialog
 from deinterlace_video import DeinterlaceVideo
 from small_dataclasses import Setup
 import shutil
-from concurrent.futures import ThreadPoolExecutor, TimeoutError
+import threading
 
 
 def load_config() -> dict:
@@ -26,37 +26,31 @@ def calculate_time_bounds(video_time: str, config: dict) -> tuple:
     end_time = timestamp + config["settings"].get("frame_extraction_puffer_after", 10)
     return start_time, end_time
 
+def try_deinterlacing_get_video_path(video_path, deinterlaced_video_dir):
+        print("Deinterlacing Video...")
+        output_path = os.path.join(deinterlaced_video_dir, os.path.basename(video_path))
+        DeinterlaceVideo(video_path, output_path)
+        video_path = output_path
+
 def list_mode(config, mode):
     table_and_index = TableAndIndex(output_path=config["default_paths"]["output_path"], table_path=config["default_paths"]["table_path"])
     damage_table_row = table_and_index.get_damage_table_row()
 
     sam_model = Sam2Class(checkpoint_filepath=config["sam_model_paths"]["sam2_checkpoint"], model_filepath=config["sam_model_paths"]["model_cfg"])
 
+    deinterlaced_video_dir = os.path.join(table_and_index.get_output_dir(), "deinterlaced videos")
+    os.makedirs(deinterlaced_video_dir, exist_ok=True)
+
+    video_path = damage_table_row["Videopfad"]
+    deinterlacing_thread = None
+
+    if config["settings"].get("auto_deinterlacing") == True:
+        try_deinterlacing_get_video_path(video_path, deinterlaced_video_dir)
+
     while damage_table_row:
         working_dir = os.path.join(table_and_index.get_output_dir(), "results", damage_table_row["Videoname"])
-        deinterlaced_video_dir = os.path.join(table_and_index.get_output_dir(), "deinterlaced videos")
         frame_dir = os.path.join(working_dir, "source images")
-        os.makedirs(deinterlaced_video_dir, exist_ok=True)
         os.makedirs(frame_dir, exist_ok=True)
-
-        video_path = damage_table_row["Videopfad"]
-        if config["settings"].get("auto_deinterlacing") == True:
-            print("Deinterlacing Video...")
-            output_path = os.path.join(deinterlaced_video_dir, os.path.basename(video_path))
-            # Deinterlace Video with timeout
-            def deinterlace_with_timeout():
-                DeinterlaceVideo(video_path, output_path)
-
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(deinterlace_with_timeout)
-                try:
-                    future.result(timeout=config["settings"].get("deinterlacing_timeout", 30))  # Timeout in seconds
-                    video_path = output_path
-                except TimeoutError:
-                    print(f"Deinterlacing timed out for video: {video_path}")
-                    # Optionally, handle what should happen after a timeout
-                    video_path = damage_table_row["Videopfad"]
-                    continue
 
         frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
         start_time, end_time = calculate_time_bounds(damage_table_row["Videozeitpunkt (h:min:sec)"], config)
@@ -64,19 +58,25 @@ def list_mode(config, mode):
         
         setup = Setup(config, frame_dir, sam_model, frame_extraction, damage_table_row)
 
+        damage_table_row = table_and_index.get_damage_table_row()
+        video_path = damage_table_row["Videopfad"]
+
         main_window = MainWindow()
         main_window.setup(setup, mode)
+
+        if config["settings"].get("auto_deinterlacing") == True:
+            deinterlacing_thread = threading.Thread(target=try_deinterlacing_get_video_path, args=(video_path, deinterlaced_video_dir))
+            deinterlacing_thread.start()
+
         main_window.open()
 
-
         main_window.save_to_json()
-
         if main_window.run_next_loop == False:
             break
-
-        damage_table_row = table_and_index.get_damage_table_row()
-
-
+        
+        if deinterlacing_thread:
+            deinterlacing_thread.join()
+        
 def test_mode(config, mode):
     """
     Test mode function to simulate the behavior of the application using predefined test configurations.

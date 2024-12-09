@@ -21,7 +21,7 @@ class DeinterlaceVideo:
                     "-b:a", "192k",                   # Audio bitrate
                     output_path                       # Output video file
                 ]
-                subprocess.run(command, check=True)
+                subprocess.run(command, check=True, timeout=25)
                 print(f"Deinterlaced video saved as: {output_path}")
             else:
                 print(f"Output file already exists: {output_path}")
