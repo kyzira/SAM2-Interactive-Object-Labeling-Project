@@ -54,7 +54,7 @@ def list_mode(config, mode):
 
         frame_extraction = FrameExtraction(video_path=video_path, output_dir=frame_dir, similarity_threshold=config["settings"]["image_similarity_threshold"])
         start_time, end_time = calculate_time_bounds(damage_table_row["Videozeitpunkt (h:min:sec)"], config)
-        frame_extraction.extract_frames_by_damage_time(start_time, end_time, config["settings"].get("extraction_frame_per_frames", 25))
+        frame_extraction.extract_frames_by_damage_time(start_time, end_time, config["settings"].get("extraction_frame_per_frames", 25), config["settings"].get("auto_histogram"))
         
         setup = Setup(config, frame_dir, sam_model, frame_extraction, damage_table_row)
 

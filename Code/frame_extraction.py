@@ -13,11 +13,13 @@ class FrameExtraction:
         self.output_dir = output_dir
         self.similarity_threshold = similarity_threshold
         self.fps = None
+        self.do_histogram = False
+        self.extraction_rate = None
 
     def get_fps(self):
         return self.fps
     
-    def extract_frames_by_damage_time(self, start_seconds: int, end_seconds: int, extraction_rate: int):
+    def extract_frames_by_damage_time(self, start_seconds: int, end_seconds: int, extraction_rate: int, auto_histogram = None):
         if not self.fps:
             cap = cv2.VideoCapture(self.video_path)
             if not cap.isOpened():
@@ -26,6 +28,12 @@ class FrameExtraction:
             self.fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
         
+        if auto_histogram is not None:
+            self.do_histogram = auto_histogram
+
+        if extraction_rate:
+            self.extraction_rate = extraction_rate
+
         start_frame = start_seconds * self.fps
         end_frame = end_seconds * self.fps
 
@@ -145,7 +153,8 @@ class FrameExtraction:
                 print(f"Failed to read frame {frame_number}.")
                 break
             
-            frame = self.__apply_histogram_equalization(frame)
+            if self.do_histogram:
+                frame = self.__apply_histogram_equalization(frame)
             
             if last_frame is not None:
                 similarity_index = self.__check_for_similarity(last_frame, frame)

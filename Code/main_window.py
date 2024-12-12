@@ -252,7 +252,30 @@ class MainWindow:
         print(f"Extracting from Video: {output_path}")
         self.frame_extractor.video_path = output_path
 
-        self.frame_extractor.extract_frames_by_damage_time(self.video_start_second, self.video_end_second, extraction_rate=25)
+        self.frame_extractor.extract_frames_by_damage_time(self.video_start_second, self.video_end_second, self.frame_extractor.extraction_rate)
+        self.__reinit_frames()
+        self.__reset_video_second()
+        self.__draw_overlays()
+        self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
+
+    def __switch_histogram_equalization(self):
+
+        self.status_bar.config(text="Status: Switching to/from histogram mode", bg="yellow", fg="black")
+        self.root.update()
+
+        # Delete images
+        for file in os.listdir(self.frame_dir):
+            file_path = os.path.join(self.frame_dir, file)
+            try:
+                if os.path.isfile(file_path):  # Check if it's a file
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Error deleting file {file_path}: {e}")
+
+        self.frame_extractor.do_histogram = not self.frame_extractor.do_histogram
+        self.frame_extractor.extract_frames_by_damage_time(self.video_start_second, self.video_end_second, self.frame_extractor.extraction_rate)
+
+
         self.__reinit_frames()
         self.__reset_video_second()
         self.__draw_overlays()
@@ -516,6 +539,7 @@ class MainWindow:
         grid_menu.add_command(label="Change Grid Size", command=self.__prompt_grid_size)
         grid_menu.add_command(label="Open frames folder", command=self.__open_frames_dir)
         grid_menu.add_command(label="Switch to/from interlaced Video", command=self.__switch_deinterlaced_video)
+        grid_menu.add_command(label="Switch to/from histogram equalization", command=self.__switch_histogram_equalization)
 
         left_click_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Select Mode", menu=left_click_menu)
