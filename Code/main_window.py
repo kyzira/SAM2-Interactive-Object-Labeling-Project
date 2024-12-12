@@ -488,7 +488,7 @@ class MainWindow:
         self.status_bar.grid(row=0, column=0, sticky="nsew", padx=10)
 
         if self.is_deinterlaced:
-            text = "interlaced video"
+            text = "de-interlaced video"
         else:
             text = "original video"
 
