@@ -26,15 +26,8 @@ class MainWindow:
         self.root = tk.Tk()
         self.root.title("Grid SAM Labeling Tool")
 
-        self.grid_size = 3  # Default grid size
-        self.max_grid_size = None
-
-        self.image_infos = []
+        self.image_info = None
         self.frame_dir = None
-        self.video_path = None
-        self.frame_extractor = None
-        self.video_start_second = None
-        self.video_end_second = None
         self.json_annotation_manager = None
 
         self.root.bind("<Escape>", self.__reset_left_click_modes)
@@ -47,11 +40,9 @@ class MainWindow:
 
         self.advance_buttons = None
         self.evaluation_buttons = None
-        self.quick_extraction_buttons = None
 
         self.button_states = []
         self.selected_observation = None
-        self.last_clicked_intervall = None
 
         self.split_intervals = {}
         self.marked_frames = []
@@ -799,33 +790,19 @@ class MainWindow:
                 continue
             if frame_num > end_frame_num:
                 continue
-
-            start_frame_index = None
-            end_frame_index = None
-
-            for i, image_info in enumerate(self.image_infos):
-                if image_info.frame_num == start_frame_num:
-                    start_frame_index = i
-                elif image_info.frame_num == end_frame_num:
-                    end_frame_index = i
-
-                if start_frame_index and end_frame_index:
-                    break
-
-
-            intervall = (start_frame_index, end_frame_index)
+            intervall = (start_frame_num, end_frame_num)
             break
         
         if intervall is None:
             return
 
-        for i in range(intervall[0], intervall[1] +1):
+        for i in range(intervall[0], intervall[1] + 1):
             new_damage_info = DamageInfo(self.selected_observation)
             new_damage_info.is_selected = True
             self.image_infos[i].data_coordinates[observation_index]  = new_damage_info
             DrawImageInfo(self.image_infos[i])
 
-        self.split_intervals[self.selected_observation].remove((self.image_infos[intervall[0]].frame_num,self.image_infos[intervall[1]].frame_num))
+        self.split_intervals[self.selected_observation].remove(intervall)
         self.__reset_left_click_modes()
         
     def __delete_mode(self, img_index):
@@ -1024,7 +1001,7 @@ class MainWindow:
         self.frame_extractor.extract_frames_by_damage_time(start_second, end_second, extraction_rate=25)
         self.__reinit_frames()
         self.__reset_video_second()
-        self.root.after(200, self.__draw_overlays())
+        self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
                     
     def __open_annotation_window(self, index):
