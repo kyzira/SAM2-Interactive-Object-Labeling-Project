@@ -101,7 +101,9 @@ class MainWindow:
         self.root.mainloop()
 
     def save_to_json(self):
-        """Saves the mask and point date saved in every frame to the json"""
+        """
+        Saves the mask and point data saved in every frame to the json
+        """
         for image_info in self.image_infos:
             self.json_annotation_manager.add_to_frame(image_info)
         
@@ -112,7 +114,7 @@ class MainWindow:
 
     def __set_frames(self, frame_dir:str):
         """
-        Reads the Folder for frames and creates a list of the frames as image_view instances
+        Reads the given directory for frames and creates a list of the frames as image_view instances.
         """
         try:
             self.image_infos = []
@@ -162,7 +164,7 @@ class MainWindow:
 
     def __set_json(self, info_dict={}):
         """
-        Takes the information given from info_dict and saves it into the Info Key in the Json
+        Takes the information given from info_dict and saves it into the Info Key in the JSON.
         """
         try:
             json_dir = os.path.dirname(self.frame_dir)
@@ -182,9 +184,9 @@ class MainWindow:
         except Exception as e:
             print(f"failed setting segmenter! \nError: {e}")
 
-    def __set_predefined_object_classes(self, predefined_object_classes:list):
+    def __set_predefined_object_classes(self, predefined_object_classes: list):
         """
-        Takes the object_add_buttons list and adds the entries to the "Add" Drop down menu.
+        Takes the object_add_buttons list and adds the entries to the "Add" drop down menu.
         """
         self.__create_menubar()
 
@@ -259,7 +261,6 @@ class MainWindow:
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
 
     def __switch_histogram_equalization(self):
-
         self.status_bar.config(text="Status: Switching to/from histogram mode", bg="yellow", fg="black")
         self.root.update()
 
@@ -275,7 +276,6 @@ class MainWindow:
         self.frame_extractor.do_histogram = not self.frame_extractor.do_histogram
         self.frame_extractor.extract_frames_by_damage_time(self.video_start_second, self.video_end_second, self.frame_extractor.extraction_rate)
 
-
         self.__reinit_frames()
         self.__reset_video_second()
         self.__draw_overlays()
@@ -283,7 +283,7 @@ class MainWindow:
 
     def __load_data_from_json(self):
         """
-        Loads Masks and Point for every Frame and loads marked frames and instance intervall from the Info.
+        Loads masks and points for every frame and loads marked frames and instance interval from the Info.
         """
         json_data = self.json_annotation_manager.get_json()
         
@@ -751,17 +751,17 @@ class MainWindow:
             damage_info.is_end_of_intervall = True
             DrawImageInfo(self.image_infos[img_index])
 
-            intervall_list = self.split_intervals.get(self.selected_observation, [])
-            intervall_list.append((self.image_infos[self.split_start].frame_num, self.image_infos[img_index].frame_num))
-            self.split_intervals[self.selected_observation] = intervall_list   
+            interval_list = self.split_intervals.get(self.selected_observation, [])
+            interval_list.append((self.image_infos[self.split_start].frame_num, self.image_infos[img_index].frame_num))
+            self.split_intervals[self.selected_observation] = interval_list   
             self.__reset_left_click_modes()
 
     def __delete_observation(self, event = None, observation = None):
         if not observation:
-            print("Error: No Observation given!")
+            print("Error: No observation given!")
             return
 
-        response = messagebox.askyesno("Confirm Deletion", f"Are you sure you want to delete '{observation}'?")
+        response = messagebox.askyesno("Confirm deletion", f"Are you sure you want to delete '{observation}'?")
         if response:  # If the user clicked "Yes"
             for image_info in self.image_infos:
                 image_info.remove_observation(observation)
@@ -830,7 +830,7 @@ class MainWindow:
         
     def __delete_mode(self, img_index):
         """
-        Deletes Point and Mask data from clicked image
+        Deletes point and aask data from clicked image.
         """
         if img_index is None:
             print("Error: No image index given!")
@@ -848,7 +848,7 @@ class MainWindow:
 
     def __on_image_left_click(self, event):
         """
-        Depending on what Mode is Currently Active this either:
+        Depending on what mode is currently active this either:
         - Marking Up:   Marks Frames with a red Border and lists them in the Info part of the Json
         - Splitting:    Creates Splits with the first clicked image being the start and the second the end for that split
         - Delete Split: Deletes Splits when a frame within a Split is clicked
@@ -883,8 +883,8 @@ class MainWindow:
         elif self.left_click_mode == "Deleting":
             self.__delete_mode(img_index)
         else:
-            intervall_list = self.split_intervals.get(self.selected_observation, [])
-            if len(intervall_list) == 0:
+            interval_list = self.split_intervals.get(self.selected_observation, [])
+            if len(interval_list) == 0:
                 self.__splitting_mode(0)
                 self.__splitting_mode(len(self.image_infos) - 1)
                 self.__create_image_grid()
@@ -999,8 +999,6 @@ class MainWindow:
         self.__reset_video_second()
         self.__draw_overlays()
         self.status_bar.config(text="Status: Ready", bg="lightgrey", fg="black")
-
-
 
     def __open_extraction_window(self):
         self.status_bar.config(text="Status: Extracting Frames", bg="lightgreen", fg="black")
@@ -1157,7 +1155,9 @@ class MainWindow:
 
 
     def __track_object_in_video(self):
-        """Tracks Objects based on their given Points in their intervalls"""
+        """
+        Tracks Objects based on their given Points in their intervalls.
+        """
 
         # Initialize a dictionary to store all tracked segments
         all_video_segments = dict()
@@ -1236,7 +1236,9 @@ class MainWindow:
         self.__close_window(run_next_loop=True)
 
     def __close_window(self, run_next_loop=False, set_skip=False):
-        """When Next or Skip is clicked, the run_next_loop bool is set to true to ensure the next video is loaded"""
+        """
+        When Next or Skip is clicked, the run_next_loop bool is set to true to ensure the next video is loaded.
+        """
         if set_skip:
             self.json_annotation_manager.add_to_info(key="Skipped", value="True")
 
